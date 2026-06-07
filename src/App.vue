@@ -9,16 +9,40 @@
       
       <FilterBar />
       
-      <div class="grid grid-cols-12 gap-4">
-        <div v-for="chart in dashboard.charts" :key="chart.id"
-          :class="`col-span-${Math.min(chart.gridArea.w, 12)}`">
-          <ChartCard
-            :title="chart.title"
-            :chart-option="chart.option"
-            :is-dark="isDark"
-            @refresh="refreshChart(chart.id)"
-            @remove="store.removeChart(chart.id)"
-          />
+      <div class="charts-container">
+        <div class="chart-row">
+          <div class="chart-item">
+            <ChartCard
+              v-if="salesTrendChart"
+              :title="salesTrendChart.title"
+              :chart-option="salesTrendChart.option"
+              :is-dark="isDark"
+              @refresh="refreshChart(salesTrendChart.id)"
+              @remove="store.removeChart(salesTrendChart.id)"
+            />
+          </div>
+          <div class="chart-item">
+            <ChartCard
+              v-if="categoryChart"
+              :title="categoryChart.title"
+              :chart-option="categoryChart.option"
+              :is-dark="isDark"
+              @refresh="refreshChart(categoryChart.id)"
+              @remove="store.removeChart(categoryChart.id)"
+            />
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-item-full">
+            <ChartCard
+              v-if="marketShareChart"
+              :title="marketShareChart.title"
+              :chart-option="marketShareChart.option"
+              :is-dark="isDark"
+              @refresh="refreshChart(marketShareChart.id)"
+              @remove="store.removeChart(marketShareChart.id)"
+            />
+          </div>
         </div>
       </div>
     </main>
@@ -26,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onUnmounted, computed } from 'vue';
 import { useDashboardStore } from './stores/dashboard';
 import { storeToRefs } from 'pinia';
 import DashboardHeader from './components/DashboardHeader.vue';
@@ -36,6 +60,10 @@ import RegionOverview from './components/RegionOverview.vue';
 
 const store = useDashboardStore();
 const { dashboard, isDark, regionOverview } = storeToRefs(store);
+
+const salesTrendChart = computed(() => dashboard.value.charts.find(c => c.id === 'chart-1'));
+const categoryChart = computed(() => dashboard.value.charts.find(c => c.id === 'chart-2'));
+const marketShareChart = computed(() => dashboard.value.charts.find(c => c.id === 'chart-3'));
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -57,3 +85,30 @@ onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval);
 });
 </script>
+
+<style scoped>
+.charts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.chart-row {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+}
+
+.chart-item {
+  flex: 1;
+  min-width: 0;
+  max-width: calc(50% - 8px);
+}
+
+.chart-item-full {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+</style>

@@ -7,13 +7,23 @@
         <button @click="$emit('remove')" class="text-gray-400 hover:text-red-500 text-xs">删除</button>
       </div>
     </div>
-    <div class="chart-container" style="height: 280px; width: 100%;">
-      <v-chart :option="chartOption" :theme="isDark ? 'dark' : ''" autoresize style="height: 100%; width: 100%;" />
+    <div class="chart-container" style="height: 280px; width: 100%; position: relative;">
+      <div v-if="!chartReady" class="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded">
+        <span class="text-gray-400 text-sm">加载中...</span>
+      </div>
+      <v-chart
+        v-if="chartReady"
+        :option="chartOption"
+        :theme="isDark ? 'dark' : ''"
+        autoresize
+        style="height: 100%; width: 100%;"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, nextTick } from 'vue';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -35,4 +45,14 @@ defineProps<{
 }>();
 
 defineEmits(['refresh', 'remove']);
+
+const chartReady = ref(false);
+
+onMounted(() => {
+  nextTick(() => {
+    setTimeout(() => {
+      chartReady.value = true;
+    }, 100);
+  });
+});
 </script>
