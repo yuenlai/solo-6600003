@@ -1,6 +1,6 @@
 <template>
   <div :class="{ 'dark': isDark }" class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-    <DashboardHeader @chart-created="handleNewChartCreated" />
+    <DashboardHeader @chart-created="handleNewChartCreated" @show-toast="showToast" />
     <main class="p-6 space-y-4 max-w-7xl mx-auto">
       <FilterBar />
 

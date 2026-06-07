@@ -3,8 +3,19 @@
     <div class="flex items-center gap-3">
       <h1 class="text-lg font-bold text-primary-600 dark:text-primary-400">DataViz</h1>
       <span class="text-sm text-gray-500 dark:text-gray-400">{{ dashboard.name }}</span>
+      <span
+        v-if="currentScheme"
+        class="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-full"
+      >
+        📋 {{ currentScheme.name }}
+      </span>
     </div>
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-3">
+      <DashboardSchemeManager
+        @scheme-saved="handleSchemeSaved"
+        @scheme-applied="handleSchemeApplied"
+        @scheme-deleted="handleSchemeDeleted"
+      />
       <button 
         @click="scrollToAlerts"
         class="relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border hover:bg-gray-100 dark:hover:bg-gray-700 dark:border-gray-600 dark:text-gray-300 transition-colors"
@@ -45,14 +56,16 @@ import { ref, computed } from 'vue';
 import { useDashboardStore } from '../stores/dashboard';
 import { storeToRefs } from 'pinia';
 import CreateChartModal from './CreateChartModal.vue';
+import DashboardSchemeManager from './DashboardSchemeManager.vue';
 import type { ChartConfig } from '../types';
 
 const emit = defineEmits<{
   (e: 'chart-created', chartId: string): void;
+  (e: 'show-toast', message: string, type: 'success' | 'info'): void;
 }>();
 
 const store = useDashboardStore();
-const { dashboard, isDark, alerts, unreadHighRiskCount } = storeToRefs(store);
+const { dashboard, isDark, alerts, unreadHighRiskCount, currentScheme } = storeToRefs(store);
 
 const showModal = ref(false);
 
@@ -67,5 +80,17 @@ function scrollToAlerts() {
 
 function handleChartCreated(chart: ChartConfig) {
   emit('chart-created', chart.id);
+}
+
+function handleSchemeSaved(schemeName: string) {
+  emit('show-toast', `💾 方案 "${schemeName}" 已保存`, 'success');
+}
+
+function handleSchemeApplied(schemeName: string) {
+  emit('show-toast', `📋 已切换到方案 "${schemeName}"`, 'success');
+}
+
+function handleSchemeDeleted(schemeName: string) {
+  emit('show-toast', `🗑️ 方案 "${schemeName}" 已删除`, 'info');
 }
 </script>

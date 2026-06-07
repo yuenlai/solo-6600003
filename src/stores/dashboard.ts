@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia';
-import { ref, computed, nextTick } from 'vue';
-import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName } from '../types';
+import { ref, computed, nextTick, watch } from 'vue';
+import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName, DashboardScheme, FilterConfig } from '../types';
 import { generateRegionData, generateAlerts, generateMockAlerts, generateScatterData, generateHeatmapData } from '../mock/data';
+
+const SCHEMES_STORAGE_KEY = 'dashboard-schemes';
+const CURRENT_SCHEME_KEY = 'dashboard-current-scheme-id';
 
 export const useDashboardStore = defineStore('dashboard', () => {
   const dashboard = ref<Dashboard>({
@@ -80,6 +83,141 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   const compareModeLoading = ref(false);
   const comparisonVersion = ref(0);
+
+  const schemes = ref<DashboardScheme[]>([]);
+  const currentSchemeId = ref<string | null>(null);
+  const schemeLoading = ref(false);
+
+  function loadSchemesFromStorage() {
+    try {
+      const stored = localStorage.getItem(SCHEMES_STORAGE_KEY);
+      if (stored) {
+        schemes.value = JSON.parse(stored);
+      }
+      const currentId = localStorage.getItem(CURRENT_SCHEME_KEY);
+      if (currentId) {
+        currentSchemeId.value = currentId;
+      }
+    } catch (e) {
+      console.error('Failed to load schemes from storage:', e);
+    }
+  }
+
+  function saveSchemesToStorage() {
+    try {
+      localStorage.setItem(SCHEMES_STORAGE_KEY, JSON.stringify(schemes.value));
+      if (currentSchemeId.value) {
+        localStorage.setItem(CURRENT_SCHEME_KEY, currentSchemeId.value);
+      }
+    } catch (e) {
+      console.error('Failed to save schemes to storage:', e);
+    }
+  }
+
+  watch(schemes, () => {
+    saveSchemesToStorage();
+  }, { deep: true });
+
+  watch(currentSchemeId, () => {
+    saveSchemesToStorage();
+  });
+
+  const currentScheme = computed(() => {
+    return schemes.value.find(s => s.id === currentSchemeId.value) || null;
+  });
+
+  function generateSchemeId(): string {
+    return `scheme-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  function getCurrentChartOrder(): string[] {
+    return dashboard.value.charts.map(c => c.id);
+  }
+
+  function saveScheme(name: string, overwriteExisting: boolean = false): DashboardScheme | null {
+    const existingIndex = schemes.value.findIndex(s => s.name === name);
+    
+    if (existingIndex !== -1 && !overwriteExisting) {
+      return null;
+    }
+
+    const schemeData: DashboardScheme = {
+      id: existingIndex !== -1 ? schemes.value[existingIndex].id : generateSchemeId(),
+      name,
+      createdAt: existingIndex !== -1 ? schemes.value[existingIndex].createdAt : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      filters: JSON.parse(JSON.stringify(dashboard.value.filters)),
+      charts: JSON.parse(JSON.stringify(dashboard.value.charts)),
+      chartOrder: getCurrentChartOrder(),
+      compareMode: JSON.parse(JSON.stringify(compareMode.value))
+    };
+
+    if (existingIndex !== -1) {
+      schemes.value[existingIndex] = schemeData;
+    } else {
+      schemes.value.push(schemeData);
+    }
+
+    currentSchemeId.value = schemeData.id;
+    return schemeData;
+  }
+
+  async function applyScheme(schemeId: string): Promise<boolean> {
+    const scheme = schemes.value.find(s => s.id === schemeId);
+    if (!scheme) return false;
+
+    schemeLoading.value = true;
+    try {
+      dashboard.value.filters = JSON.parse(JSON.stringify(scheme.filters));
+      dashboard.value.charts = JSON.parse(JSON.stringify(scheme.charts));
+      compareMode.value = JSON.parse(JSON.stringify(scheme.compareMode));
+
+      const regionFilter = dashboard.value.filters.find((f: FilterConfig) => f.field === 'region');
+      if (regionFilter && regionFilter.value) {
+        regionUpdateFlag.value++;
+        updateChartsForRegion(regionFilter.value);
+        refreshAlerts(true);
+      }
+
+      if (compareMode.value.enabled) {
+        ensureCompareDataLoaded();
+        comparisonVersion.value++;
+      }
+
+      currentSchemeId.value = schemeId;
+      await nextTick();
+      return true;
+    } finally {
+      schemeLoading.value = false;
+    }
+  }
+
+  function deleteScheme(schemeId: string): boolean {
+    const index = schemes.value.findIndex(s => s.id === schemeId);
+    if (index === -1) return false;
+
+    schemes.value.splice(index, 1);
+    if (currentSchemeId.value === schemeId) {
+      currentSchemeId.value = null;
+    }
+    return true;
+  }
+
+  function renameScheme(schemeId: string, newName: string): boolean {
+    const scheme = schemes.value.find(s => s.id === schemeId);
+    if (!scheme) return false;
+
+    const existing = schemes.value.find(s => s.name === newName && s.id !== schemeId);
+    if (existing) return false;
+
+    scheme.name = newName;
+    scheme.updatedAt = new Date().toISOString();
+    return true;
+  }
+
+  function checkSchemeNameExists(name: string): boolean {
+    return schemes.value.some(s => s.name === name);
+  }
   
   const alerts = ref<Alert[]>([]);
   const highlightedChartId = ref<string | null>(null);
@@ -855,6 +993,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   updateChartsForRegion('all');
   refreshAlerts();
+  loadSchemesFromStorage();
 
   return {
     dashboard, isDark,
@@ -863,6 +1002,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
     alertsByLevel, alertsByType,
     highlightedChartId, alertAutoRefresh, lastAlertUpdate,
     compareMode, compareModeLoading, comparisonData, comparisonVersion, regionDataA, regionDataB,
+    schemes, currentSchemeId, currentScheme, schemeLoading,
+    saveScheme, applyScheme, deleteScheme, renameScheme, checkSchemeNameExists,
     toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData,
     refreshRegionData, updateChartsForRegion,
     refreshAlerts, markAlertAsRead, markAllAlertsAsRead,

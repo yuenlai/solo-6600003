@@ -161,3 +161,14 @@ export interface CompareModeState {
   regionA: string;
   regionB: string;
 }
+
+export interface DashboardScheme {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  filters: FilterConfig[];
+  charts: ChartConfig[];
+  chartOrder: string[];
+  compareMode: CompareModeState;
+}
