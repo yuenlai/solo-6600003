@@ -47,6 +47,10 @@ import { storeToRefs } from 'pinia';
 import CreateChartModal from './CreateChartModal.vue';
 import type { ChartConfig } from '../types';
 
+const emit = defineEmits<{
+  (e: 'chart-created', chartId: string): void;
+}>();
+
 const store = useDashboardStore();
 const { dashboard, isDark, alerts, unreadHighRiskCount } = storeToRefs(store);
 
@@ -62,12 +66,6 @@ function scrollToAlerts() {
 }
 
 function handleChartCreated(chart: ChartConfig) {
-  setTimeout(() => {
-    const elementId = `chart-${chart.id}`;
-    const chartElement = document.getElementById(elementId);
-    if (chartElement) {
-      chartElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, 100);
+  emit('chart-created', chart.id);
 }
 </script>

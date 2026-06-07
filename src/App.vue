@@ -1,6 +1,6 @@
 <template>
   <div :class="{ 'dark': isDark }" class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-    <DashboardHeader />
+    <DashboardHeader @chart-created="handleNewChartCreated" />
     <main class="p-6 space-y-4 max-w-7xl mx-auto">
       <RegionOverview 
         :overview="regionOverview" 
@@ -56,26 +56,48 @@
           </div>
         </div>
 
-        <template v-for="(row, _index) in customChartRows" :key="_index">
-          <div class="chart-row">
-            <template v-for="chart in row" :key="chart.id">
-              <div :class="row.length === 1 ? 'chart-item-full' : 'chart-item'">
-                <ChartCard
-                  :chart-id="chart.id"
-                  :title="chart.title"
-                  :chart-option="chart.option"
-                  :is-dark="isDark"
-                  :is-highlighted="highlightedChartId === chart.id"
-                  :alert-count="getChartAlertCount(chart.id)"
-                  @refresh="refreshChart(chart.id)"
-                  @remove="handleRemoveChart(chart.id)"
-                />
-              </div>
-            </template>
-          </div>
-        </template>
+        <TransitionGroup name="chart-list" tag="div" class="space-y-4">
+          <template v-for="(row, _index) in customChartRows" :key="row.map(c => c.id).join('-')">
+            <div class="chart-row">
+              <template v-for="chart in row" :key="chart.id">
+                <div 
+                  :class="[
+                    row.length === 1 ? 'chart-item-full' : 'chart-item',
+                    { 'chart-leaving': deletingChartIds.has(chart.id) }
+                  ]"
+                >
+                  <ChartCard
+                    :chart-id="chart.id"
+                    :title="chart.title"
+                    :chart-option="chart.option"
+                    :is-dark="isDark"
+                    :is-custom="chart.isCustom"
+                    :is-new="newChartIds.has(chart.id)"
+                    :is-highlighted="highlightedChartId === chart.id"
+                    :alert-count="getChartAlertCount(chart.id)"
+                    @refresh="refreshChart(chart.id)"
+                    @remove="handleRemoveChart(chart.id)"
+                    @animation-end="handleAnimationEnd(chart.id)"
+                  />
+                </div>
+              </template>
+            </div>
+          </template>
+        </TransitionGroup>
       </div>
     </main>
+
+    <Teleport to="body">
+      <Transition name="toast">
+        <div 
+          v-if="toastMessage" 
+          class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2"
+          :class="toastType === 'success' ? 'bg-green-500' : 'bg-blue-500'"
+        >
+          <span class="text-white font-medium">{{ toastMessage }}</span>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -93,6 +115,12 @@ const store = useDashboardStore();
 const { dashboard, isDark, regionOverview, alerts, highlightedChartId } = storeToRefs(store);
 
 const chartsContainer = ref<HTMLElement | null>(null);
+const newChartIds = ref<Set<string>>(new Set());
+const deletingChartIds = ref<Set<string>>(new Set());
+const toastMessage = ref('');
+const toastType = ref<'success' | 'info'>('success');
+
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 const salesTrendChart = computed(() => dashboard.value.charts.find(c => c.id === 'chart-1'));
 const categoryChart = computed(() => dashboard.value.charts.find(c => c.id === 'chart-2'));
@@ -110,10 +138,39 @@ const customChartRows = computed(() => {
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
+function showToast(message: string, type: 'success' | 'info' = 'success') {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastMessage.value = message;
+  toastType.value = type;
+  toastTimer = setTimeout(() => {
+    toastMessage.value = '';
+  }, 3000);
+}
+
+function handleNewChartCreated(chartId: string) {
+  newChartIds.value.add(chartId);
+  showToast('✨ 图表创建成功！');
+  
+  setTimeout(() => {
+    const elementId = `chart-${chartId}`;
+    const chartElement = document.getElementById(elementId);
+    if (chartElement) {
+      chartElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 300);
+}
+
+function handleAnimationEnd(chartId: string) {
+  newChartIds.value.delete(chartId);
+}
+
 function refreshChart(chartId: string) {
   const chart = dashboard.value.charts.find(c => c.id === chartId);
   if (chart && chart.isCustom) {
     store.refreshCustomChart(chartId);
+    setTimeout(() => {
+      showToast('🔄 数据已刷新', 'info');
+    }, 600);
   } else {
     store.refreshRegionData();
   }
@@ -124,7 +181,14 @@ function handleRefreshOverview() {
 }
 
 function handleRemoveChart(chartId: string) {
-  store.removeChart(chartId);
+  deletingChartIds.value.add(chartId);
+  showToast('🗑️ 图表已删除', 'info');
+  
+  setTimeout(() => {
+    store.removeChart(chartId);
+    deletingChartIds.value.delete(chartId);
+    newChartIds.value.delete(chartId);
+  }, 300);
 }
 
 function getChartAlertCount(chartId: string): number {
@@ -164,6 +228,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval);
+  if (toastTimer) clearTimeout(toastTimer);
 });
 </script>
 
@@ -191,6 +256,50 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   width: 100%;
+}
+
+.chart-leaving {
+  animation: chart-leave-animation 0.3s ease-out forwards;
+}
+
+@keyframes chart-leave-animation {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+.chart-list-enter-active {
+  transition: all 0.3s ease;
+}
+
+.chart-list-leave-active {
+  transition: all 0.3s ease;
+}
+
+.chart-list-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.chart-list-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -20px);
 }
 
 :deep(.locate-highlight) {
