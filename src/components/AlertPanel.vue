@@ -388,7 +388,7 @@ function locateToChart(alert: Alert) {
   
   setTimeout(() => {
     store.setHighlightedChart(null);
-  }, 3000);
+  }, 5000);
 }
 </script>
 

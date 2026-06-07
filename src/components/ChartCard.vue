@@ -78,17 +78,41 @@ onMounted(() => {
 
 <style scoped>
 .chart-card.highlighted {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5), 0 10px 40px rgba(59, 130, 246, 0.3);
-  transform: scale(1.02);
-  z-index: 10;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.8), 0 0 30px rgba(239, 68, 68, 0.5), 0 20px 60px rgba(0, 0, 0, 0.3);
+  transform: scale(1.05);
+  z-index: 100;
+  position: relative;
+}
+
+.chart-card.highlighted::before {
+  content: '📍 告警定位';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, #ef4444, #f97316);
+  color: white;
+  padding: 4px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 101;
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.4);
+  white-space: nowrap;
 }
 
 @keyframes highlight-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5), 0 10px 40px rgba(59, 130, 246, 0.3); }
-  50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.3), 0 10px 40px rgba(59, 130, 246, 0.5); }
+  0%, 100% { 
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.8), 0 0 30px rgba(239, 68, 68, 0.5), 0 20px 60px rgba(0, 0, 0, 0.3);
+    transform: scale(1.05);
+  }
+  50% { 
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0.4), 0 0 50px rgba(239, 68, 68, 0.7), 0 20px 60px rgba(0, 0, 0, 0.3);
+    transform: scale(1.08);
+  }
 }
 
 .chart-card.highlighted {
-  animation: highlight-pulse 1s ease-in-out 3;
+  animation: highlight-pulse 1s ease-in-out infinite;
 }
 </style>

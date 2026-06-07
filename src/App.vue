@@ -103,7 +103,7 @@ function handleLocateToChart(chartId: string) {
     chartElement.classList.add('locate-highlight');
     setTimeout(() => {
       chartElement.classList.remove('locate-highlight');
-    }, 3000);
+    }, 5000);
   } else {
     setTimeout(() => {
       const retryElement = document.getElementById(elementId);
@@ -112,7 +112,7 @@ function handleLocateToChart(chartId: string) {
         retryElement.classList.add('locate-highlight');
         setTimeout(() => {
           retryElement.classList.remove('locate-highlight');
-        }, 3000);
+        }, 5000);
       }
     }, 100);
   }
@@ -156,18 +156,38 @@ onUnmounted(() => {
 }
 
 :deep(.locate-highlight) {
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.4) !important;
-  transform: scale(1.02);
-  z-index: 100;
-  animation: locate-pulse 1s ease-in-out infinite;
+  box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.9), 0 0 40px rgba(239, 68, 68, 0.6), 0 20px 60px rgba(0, 0, 0, 0.4) !important;
+  transform: scale(1.08) !important;
+  z-index: 1000 !important;
+  position: relative !important;
+  animation: locate-pulse 0.8s ease-in-out infinite !important;
+}
+
+:deep(.locate-highlight::before) {
+  content: '📍 告警定位到此图表' !important;
+  position: absolute !important;
+  top: -16px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  background: linear-gradient(90deg, #ef4444, #f97316) !important;
+  color: white !important;
+  padding: 6px 20px !important;
+  border-radius: 20px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  z-index: 1001 !important;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.5) !important;
+  white-space: nowrap !important;
 }
 
 @keyframes locate-pulse {
   0%, 100% { 
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.4);
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.9), 0 0 40px rgba(239, 68, 68, 0.6), 0 20px 60px rgba(0, 0, 0, 0.4);
+    transform: scale(1.08);
   }
   50% { 
-    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 0 50px rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 0 12px rgba(239, 68, 68, 0.4), 0 0 60px rgba(239, 68, 68, 0.8), 0 20px 60px rgba(0, 0, 0, 0.4);
+    transform: scale(1.1);
   }
 }
 </style>

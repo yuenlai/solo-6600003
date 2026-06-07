@@ -91,16 +91,24 @@ export function generateRegionSalesTrend(region: string): { months: string[]; sa
   
   for (let i = 0; i < MONTHS.length; i++) {
     let value = baseSales + i * 50000;
+    let isAnomaly = false;
     
     if (i === 2) {
-      value = value * 1.4;
+      value = value * 1.5;
+      isAnomaly = true;
     } else if (i === 3) {
-      value = value * 0.65;
+      value = value * 0.6;
+      isAnomaly = true;
     } else if (i >= 4) {
-      value = baseSales + 4 * 50000 - (i - 3) * 80000;
+      value = baseSales + 4 * 50000 - (i - 3) * 100000;
+      isAnomaly = true;
     }
     
-    value = value * baseline.sales * (0.9 + Math.random() * 0.2);
+    if (isAnomaly) {
+      value = value * baseline.sales;
+    } else {
+      value = value * baseline.sales * (0.95 + Math.random() * 0.1);
+    }
     sales.push(Math.floor(Math.max(100000, value)));
   }
   
@@ -109,16 +117,24 @@ export function generateRegionSalesTrend(region: string): { months: string[]; sa
   
   for (let i = 0; i < MONTHS.length; i++) {
     let value = baseOrders + i * 1200;
+    let isAnomaly = false;
     
     if (i === 2) {
-      value = value * 1.35;
+      value = value * 1.45;
+      isAnomaly = true;
     } else if (i === 3) {
-      value = value * 0.6;
+      value = value * 0.55;
+      isAnomaly = true;
     } else if (i >= 4) {
-      value = baseOrders + 4 * 1200 - (i - 3) * 20000;
+      value = baseOrders + 4 * 1200 - (i - 3) * 25000;
+      isAnomaly = true;
     }
     
-    value = value * baseline.sales * (0.9 + Math.random() * 0.2);
+    if (isAnomaly) {
+      value = value * baseline.sales;
+    } else {
+      value = value * baseline.sales * (0.95 + Math.random() * 0.1);
+    }
     orders.push(Math.floor(Math.max(5000, value)));
   }
   
@@ -139,20 +155,26 @@ export function generateRegionCategorySales(region: string): { categories: strin
   const baseValues = [1500000, 1200000, 1000000, 800000, 600000];
   const sales = CATEGORIES.map((cat, i) => {
     let value = baseValues[i] * baseline.sales * (categoryWeights[cat] || 1.0);
+    let isAnomaly = false;
     
     if (cat === '电子产品') {
-      value = value * 1.6;
+      value = value * 1.8;
+      isAnomaly = true;
     } else if (cat === '服装') {
-      value = value * 0.9;
+      value = value * 0.85;
     }
     
-    value = value * (0.9 + Math.random() * 0.2);
+    if (isAnomaly) {
+      value = value;
+    } else {
+      value = value * (0.95 + Math.random() * 0.1);
+    }
     return Math.floor(value);
   });
   
   const growth = CATEGORIES.map((cat, _i) => {
     if (cat === '电子产品') {
-      return 0.5 + Math.random() * 0.2;
+      return 0.6 + Math.random() * 0.2;
     }
     return baseline.growth + (Math.random() - 0.5) * 0.1;
   });
@@ -176,14 +198,20 @@ export function generateRegionMarketShare(region: string): { channels: { name: s
   const baseValues = [1000000, 800000, 600000, 500000, 300000];
   const channels = CHANNELS.map((name, i) => {
     let value = baseValues[i] * baseline.sales * (weights[name] || 1.0);
+    let isAnomaly = false;
     
     if (name === '视频广告') {
-      value = value * 1.8;
+      value = value * 2.0;
+      isAnomaly = true;
     } else if (name === '邮件营销') {
-      value = value * 0.7;
+      value = value * 0.65;
     }
     
-    value = value * (0.9 + Math.random() * 0.2);
+    if (isAnomaly) {
+      value = value;
+    } else {
+      value = value * (0.95 + Math.random() * 0.1);
+    }
     return {
       name,
       value: Math.floor(value)
@@ -202,7 +230,7 @@ export function generateRegionData(region: string): RegionData {
   };
 }
 
-function detectAbnormalFluctuation(values: number[], threshold: number = 0.3): { isAlert: boolean; changePercent: number; index: number } {
+function detectAbnormalFluctuation(values: number[], threshold: number = 0.2): { isAlert: boolean; changePercent: number; index: number } {
   if (values.length < 2) return { isAlert: false, changePercent: 0, index: -1 };
   
   for (let i = 1; i < values.length; i++) {
