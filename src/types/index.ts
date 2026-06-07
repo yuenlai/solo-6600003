@@ -162,6 +162,59 @@ export interface CompareModeState {
   regionB: string;
 }
 
+export interface MetricDetail {
+  name: string;
+  description: string;
+  unit: string;
+  calculationMethod: string;
+  dataSource: string;
+  updateFrequency: string;
+  businessMeaning: string;
+}
+
+export interface SegmentDataItem {
+  name: string;
+  value: number;
+  percentage: number;
+  growth: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
+export interface SegmentData {
+  title: string;
+  dimension: string;
+  items: SegmentDataItem[];
+}
+
+export interface RecentChange {
+  period: string;
+  currentValue: number;
+  previousValue: number;
+  changeValue: number;
+  changePercent: number;
+  trend: 'up' | 'down' | 'stable';
+  dataPoints: { label: string; value: number }[];
+  analysis: string;
+}
+
+export interface ChartDetailData {
+  chartId: string;
+  chartTitle: string;
+  chartType: string;
+  dataDimension: DataDimension;
+  metric: MetricDetail;
+  segmentData: SegmentData;
+  recentChange: RecentChange;
+  overview: {
+    totalValue: number;
+    avgValue: number;
+    maxValue: number;
+    minValue: number;
+    peakPeriod: string;
+    valleyPeriod: string;
+  };
+}
+
 export interface DashboardScheme {
   id: string;
   name: string;

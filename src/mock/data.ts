@@ -1,5 +1,5 @@
 // Mock data generator for the dashboard
-import type { DataPoint, RealTimeData, RegionData, RegionOverview, Alert, AlertType, AlertLevel } from '../types';
+import type { DataPoint, RealTimeData, RegionData, RegionOverview, Alert, AlertType, AlertLevel, ChartDetailData, DataDimension } from '../types';
 
 const MONTHS = ['1月', '2月', '3月', '4月', '5月', '6月'];
 const CATEGORIES = ['电子产品', '服装', '食品', '家居', '运动'];
@@ -592,4 +592,359 @@ export function generateMockAlerts(): Alert[] {
   ];
   
   return mockAlerts;
+}
+
+const METRIC_DETAIL_CONFIGS: Record<DataDimension, Omit<ChartDetailData['metric'], 'name'>> = {
+  salesTrend: {
+    description: '反映企业在一定时期内的销售业绩变化情况，是衡量业务增长的核心指标',
+    unit: '万元',
+    calculationMethod: '当期销售金额 = 订单金额 - 退款金额',
+    dataSource: '交易系统、订单管理系统',
+    updateFrequency: '每日更新',
+    businessMeaning: '销售额直接反映企业经营规模和市场表现，是评估业务健康度的首要指标'
+  },
+  categorySales: {
+    description: '按产品分类统计的销售金额，用于分析不同品类的贡献度和市场表现',
+    unit: '万元',
+    calculationMethod: '分类销售额 = 该分类下所有商品销售金额之和',
+    dataSource: '商品管理系统、交易系统',
+    updateFrequency: '每日更新',
+    businessMeaning: '分类销售分析帮助识别核心品类和潜力品类，指导库存和营销策略'
+  },
+  marketShare: {
+    description: '各渠道带来的销售额占比，反映不同获客渠道的贡献度和效率',
+    unit: '万元',
+    calculationMethod: '渠道占比 = 该渠道销售额 / 总销售额 × 100%',
+    dataSource: '营销系统、渠道归因系统',
+    updateFrequency: '每日更新',
+    businessMeaning: '渠道分析指导营销预算分配，优化获客策略，提升ROI'
+  },
+  ordersTrend: {
+    description: '反映企业在一定时期内的订单数量变化情况，是衡量业务活跃度的重要指标',
+    unit: '万单',
+    calculationMethod: '当期订单数 = 有效订单数 - 取消订单数',
+    dataSource: '订单管理系统',
+    updateFrequency: '实时更新',
+    businessMeaning: '订单量反映用户购买意愿和平台活跃度，结合客单价可分析用户消费行为'
+  },
+  customerGrowth: {
+    description: '反映企业客户规模的增长情况，是衡量用户获取能力的核心指标',
+    unit: '百人',
+    calculationMethod: '新增客户数 = 当期首次下单用户数',
+    dataSource: 'CRM系统、用户中心',
+    updateFrequency: '每日更新',
+    businessMeaning: '客户增长反映企业获客能力和市场扩张速度，是评估长期增长潜力的关键'
+  }
+};
+
+const CHART_TYPE_NAMES: Record<string, string> = {
+  line: '折线图',
+  bar: '柱状图',
+  pie: '饼图',
+  scatter: '散点图',
+  heatmap: '热力图'
+};
+
+export function generateChartDetailData(
+  chartId: string,
+  chartTitle: string,
+  chartType: string,
+  dimension: DataDimension,
+  regionData: RegionData
+): ChartDetailData {
+  const metricConfig = METRIC_DETAIL_CONFIGS[dimension];
+  const rand = seededRandom(regionSeed(regionData.overview.region) + chartId.split('').reduce((a, b) => a + b.charCodeAt(0), 0));
+
+  let overviewData: ChartDetailData['overview'];
+  let segmentData: ChartDetailData['segmentData'];
+  let recentChange: ChartDetailData['recentChange'];
+
+  if (dimension === 'salesTrend') {
+    const sales = regionData.salesTrend.sales;
+    const months = regionData.salesTrend.months;
+    const maxIndex = sales.indexOf(Math.max(...sales));
+    const minIndex = sales.indexOf(Math.min(...sales));
+
+    overviewData = {
+      totalValue: sales.reduce((a, b) => a + b, 0),
+      avgValue: Math.floor(sales.reduce((a, b) => a + b, 0) / sales.length),
+      maxValue: Math.max(...sales),
+      minValue: Math.min(...sales),
+      peakPeriod: months[maxIndex],
+      valleyPeriod: months[minIndex]
+    };
+
+    const items = months.map((month, i) => {
+      const value = sales[i];
+      const percentage = (value / overviewData.totalValue) * 100;
+      const prevValue = i > 0 ? sales[i - 1] : value;
+      const growth = prevValue !== 0 ? (value - prevValue) / prevValue : 0;
+      return {
+        name: month,
+        value,
+        percentage: Number(percentage.toFixed(1)),
+        growth: Number(growth.toFixed(3)),
+        trend: (growth > 0.05 ? 'up' : growth < -0.05 ? 'down' : 'stable') as 'up' | 'down' | 'stable'
+      };
+    });
+
+    segmentData = {
+      title: '月度销售分布',
+      dimension: '时间',
+      items
+    };
+
+    const recentSales = sales.slice(-2);
+    const changeValue = recentSales[1] - recentSales[0];
+    const changePercent = recentSales[0] !== 0 ? changeValue / recentSales[0] : 0;
+
+    recentChange = {
+      period: '近2个月',
+      currentValue: recentSales[1],
+      previousValue: recentSales[0],
+      changeValue,
+      changePercent: Number(changePercent.toFixed(3)),
+      trend: (changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'stable') as 'up' | 'down' | 'stable',
+      dataPoints: months.map((m, i) => ({ label: m, value: sales[i] })),
+      analysis: changePercent > 0.1
+        ? '近期销售额增长强劲，主要得益于促销活动和旺季效应，建议持续加大市场投入'
+        : changePercent > 0
+        ? '销售额保持平稳增长，业务发展健康，建议关注竞品动态以保持增长势头'
+        : changePercent > -0.1
+        ? '销售额略有下滑，可能受季节性因素影响，建议优化产品组合和定价策略'
+        : '销售额出现明显下滑，需要深入分析原因，可能涉及市场竞争加剧或用户流失问题'
+    };
+  } else if (dimension === 'categorySales') {
+    const categories = regionData.categorySales.categories;
+    const sales = regionData.categorySales.sales;
+    const growth = regionData.categorySales.growth;
+    const maxIndex = sales.indexOf(Math.max(...sales));
+    const minIndex = sales.indexOf(Math.min(...sales));
+
+    overviewData = {
+      totalValue: sales.reduce((a, b) => a + b, 0),
+      avgValue: Math.floor(sales.reduce((a, b) => a + b, 0) / sales.length),
+      maxValue: Math.max(...sales),
+      minValue: Math.min(...sales),
+      peakPeriod: categories[maxIndex],
+      valleyPeriod: categories[minIndex]
+    };
+
+    const items = categories.map((cat, i) => {
+      const value = sales[i];
+      const percentage = (value / overviewData.totalValue) * 100;
+      return {
+        name: cat,
+        value,
+        percentage: Number(percentage.toFixed(1)),
+        growth: Number(growth[i].toFixed(3)),
+        trend: (growth[i] > 0.05 ? 'up' : growth[i] < -0.05 ? 'down' : 'stable') as 'up' | 'down' | 'stable'
+      };
+    }).sort((a, b) => b.value - a.value);
+
+    segmentData = {
+      title: '品类销售分布',
+      dimension: '品类',
+      items
+    };
+
+    const avgGrowth = growth.reduce((a, b) => a + b, 0) / growth.length;
+    const topCategory = items[0];
+
+    recentChange = {
+      period: '同比上期',
+      currentValue: overviewData.totalValue,
+      previousValue: Math.floor(overviewData.totalValue / (1 + avgGrowth)),
+      changeValue: Math.floor(overviewData.totalValue * avgGrowth),
+      changePercent: Number(avgGrowth.toFixed(3)),
+      trend: (avgGrowth > 0 ? 'up' : avgGrowth < 0 ? 'down' : 'stable') as 'up' | 'down' | 'stable',
+      dataPoints: categories.map((c, i) => ({ label: c, value: sales[i] })),
+      analysis: topCategory.percentage > 40
+        ? `${topCategory.name}品类贡献超过40%，是绝对核心品类，建议继续强化优势，但需注意品类集中风险`
+        : avgGrowth > 0.1
+        ? `各品类整体增长势头良好，${categories[growth.indexOf(Math.max(...growth))]}增长最快，可作为潜力品类重点培养`
+        : avgGrowth > 0
+        ? '品类结构相对稳定，建议对增长较慢的品类进行策略调整'
+        : '部分品类出现下滑，建议重新评估品类定位，考虑淘汰低效品类或进行转型升级'
+    };
+  } else if (dimension === 'marketShare') {
+    const channels = regionData.marketShare.channels;
+    const values = channels.map(c => c.value);
+    const names = channels.map(c => c.name);
+    const maxIndex = values.indexOf(Math.max(...values));
+    const minIndex = values.indexOf(Math.min(...values));
+
+    overviewData = {
+      totalValue: values.reduce((a, b) => a + b, 0),
+      avgValue: Math.floor(values.reduce((a, b) => a + b, 0) / values.length),
+      maxValue: Math.max(...values),
+      minValue: Math.min(...values),
+      peakPeriod: names[maxIndex],
+      valleyPeriod: names[minIndex]
+    };
+
+    const items = channels.map((channel, i) => {
+      const value = channel.value;
+      const percentage = (value / overviewData.totalValue) * 100;
+      const baseGrowth = (rand() - 0.5) * 0.3;
+      const growth = names[i] === '视频广告' ? 0.45 + rand() * 0.2 : names[i] === '邮件营销' ? -0.15 - rand() * 0.1 : baseGrowth;
+      return {
+        name: channel.name,
+        value,
+        percentage: Number(percentage.toFixed(1)),
+        growth: Number(growth.toFixed(3)),
+        trend: (growth > 0.05 ? 'up' : growth < -0.05 ? 'down' : 'stable') as 'up' | 'down' | 'stable'
+      };
+    }).sort((a, b) => b.value - a.value);
+
+    segmentData = {
+      title: '渠道销售分布',
+      dimension: '渠道',
+      items
+    };
+
+    const avgGrowth = items.reduce((a, b) => a + b.growth, 0) / items.length;
+    const topChannel = items[0];
+
+    recentChange = {
+      period: '同比上期',
+      currentValue: overviewData.totalValue,
+      previousValue: Math.floor(overviewData.totalValue / (1 + avgGrowth)),
+      changeValue: Math.floor(overviewData.totalValue * avgGrowth),
+      changePercent: Number(avgGrowth.toFixed(3)),
+      trend: (avgGrowth > 0 ? 'up' : avgGrowth < 0 ? 'down' : 'stable') as 'up' | 'down' | 'stable',
+      dataPoints: names.map((n, i) => ({ label: n, value: values[i] })),
+      analysis: topChannel.percentage > 35
+        ? `${topChannel.name}是核心获客渠道，贡献超过35%的销售额，建议加大投入巩固优势，但需注意渠道单一风险`
+        : items.filter(i => i.trend === 'up').length >= 3
+        ? '多渠道齐头并进，渠道结构健康，视频广告等新兴渠道增长迅速，建议重点布局'
+        : items.filter(i => i.trend === 'down').length >= 2
+        ? '部分传统渠道增长乏力，建议重新评估渠道策略，考虑将预算向高效渠道转移'
+        : '渠道分布相对均衡，各渠道表现稳定，建议持续监控渠道ROI，动态优化预算分配'
+    };
+  } else if (dimension === 'ordersTrend') {
+    const orders = regionData.salesTrend.orders;
+    const months = regionData.salesTrend.months;
+    const maxIndex = orders.indexOf(Math.max(...orders));
+    const minIndex = orders.indexOf(Math.min(...orders));
+
+    overviewData = {
+      totalValue: orders.reduce((a, b) => a + b, 0),
+      avgValue: Math.floor(orders.reduce((a, b) => a + b, 0) / orders.length),
+      maxValue: Math.max(...orders),
+      minValue: Math.min(...orders),
+      peakPeriod: months[maxIndex],
+      valleyPeriod: months[minIndex]
+    };
+
+    const items = months.map((month, i) => {
+      const value = orders[i];
+      const percentage = (value / overviewData.totalValue) * 100;
+      const prevValue = i > 0 ? orders[i - 1] : value;
+      const growth = prevValue !== 0 ? (value - prevValue) / prevValue : 0;
+      return {
+        name: month,
+        value,
+        percentage: Number(percentage.toFixed(1)),
+        growth: Number(growth.toFixed(3)),
+        trend: (growth > 0.05 ? 'up' : growth < -0.05 ? 'down' : 'stable') as 'up' | 'down' | 'stable'
+      };
+    });
+
+    segmentData = {
+      title: '月度订单分布',
+      dimension: '时间',
+      items
+    };
+
+    const recentOrders = orders.slice(-2);
+    const changeValue = recentOrders[1] - recentOrders[0];
+    const changePercent = recentOrders[0] !== 0 ? changeValue / recentOrders[0] : 0;
+
+    recentChange = {
+      period: '近2个月',
+      currentValue: recentOrders[1],
+      previousValue: recentOrders[0],
+      changeValue,
+      changePercent: Number(changePercent.toFixed(3)),
+      trend: (changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'stable') as 'up' | 'down' | 'stable',
+      dataPoints: months.map((m, i) => ({ label: m, value: orders[i] })),
+      analysis: changePercent > 0.15
+        ? '订单量增长迅猛，平台活跃度显著提升，建议关注服务器承载能力和物流配送能力'
+        : changePercent > 0
+        ? '订单量稳步增长，用户粘性良好，建议结合促销活动进一步提升转化'
+        : changePercent > -0.1
+        ? '订单量略有波动，属正常范围，建议关注用户留存和复购情况'
+        : '订单量下滑明显，需要排查是否存在竞品促销、产品体验问题或营销投入不足'
+    };
+  } else {
+    const customerGrowth = Array.from({ length: 6 }, (_, i) => Math.floor((80 + rand() * 40) * (1 + i * 0.05)));
+    const months = regionData.salesTrend.months;
+    const maxIndex = customerGrowth.indexOf(Math.max(...customerGrowth));
+    const minIndex = customerGrowth.indexOf(Math.min(...customerGrowth));
+
+    overviewData = {
+      totalValue: customerGrowth.reduce((a, b) => a + b, 0),
+      avgValue: Math.floor(customerGrowth.reduce((a, b) => a + b, 0) / customerGrowth.length),
+      maxValue: Math.max(...customerGrowth),
+      minValue: Math.min(...customerGrowth),
+      peakPeriod: months[maxIndex],
+      valleyPeriod: months[minIndex]
+    };
+
+    const items = months.map((month, i) => {
+      const value = customerGrowth[i];
+      const percentage = (value / overviewData.totalValue) * 100;
+      const prevValue = i > 0 ? customerGrowth[i - 1] : value;
+      const growth = prevValue !== 0 ? (value - prevValue) / prevValue : 0;
+      return {
+        name: month,
+        value,
+        percentage: Number(percentage.toFixed(1)),
+        growth: Number(growth.toFixed(3)),
+        trend: (growth > 0.05 ? 'up' : growth < -0.05 ? 'down' : 'stable') as 'up' | 'down' | 'stable'
+      };
+    });
+
+    segmentData = {
+      title: '月度新增客户分布',
+      dimension: '时间',
+      items
+    };
+
+    const recent = customerGrowth.slice(-2);
+    const changeValue = recent[1] - recent[0];
+    const changePercent = recent[0] !== 0 ? changeValue / recent[0] : 0;
+
+    recentChange = {
+      period: '近2个月',
+      currentValue: recent[1],
+      previousValue: recent[0],
+      changeValue,
+      changePercent: Number(changePercent.toFixed(3)),
+      trend: (changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'stable') as 'up' | 'down' | 'stable',
+      dataPoints: months.map((m, i) => ({ label: m, value: customerGrowth[i] })),
+      analysis: changePercent > 0.1
+        ? '客户增长势头强劲，获客策略效果显著，建议持续优化获客渠道，同时关注新用户留存'
+        : changePercent > 0
+        ? '客户规模稳步扩大，业务发展健康，建议加强新用户引导和首单转化'
+        : changePercent > -0.05
+        ? '客户增长保持稳定，建议优化注册流程和用户体验以提升转化率'
+        : '获客难度加大，可能是市场竞争加剧或渠道效果下降，建议重新评估获客策略'
+    };
+  }
+
+  return {
+    chartId,
+    chartTitle,
+    chartType: CHART_TYPE_NAMES[chartType] || chartType,
+    dataDimension: dimension,
+    metric: {
+      name: chartTitle,
+      ...metricConfig
+    },
+    segmentData,
+    recentChange,
+    overview: overviewData
+  };
 }

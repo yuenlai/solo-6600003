@@ -48,6 +48,7 @@
                   :alert-count="getChartAlertCount(salesTrendChart.id)"
                   @refresh="refreshChart(salesTrendChart.id)"
                   @remove="store.removeChart(salesTrendChart.id)"
+                  @click="handleChartClick(salesTrendChart.id)"
                 />
               </div>
               <div class="chart-item">
@@ -61,6 +62,7 @@
                   :alert-count="getChartAlertCount(categoryChart.id)"
                   @refresh="refreshChart(categoryChart.id)"
                   @remove="store.removeChart(categoryChart.id)"
+                  @click="handleChartClick(categoryChart.id)"
                 />
               </div>
             </div>
@@ -76,6 +78,7 @@
                   :alert-count="getChartAlertCount(marketShareChart.id)"
                   @refresh="refreshChart(marketShareChart.id)"
                   @remove="store.removeChart(marketShareChart.id)"
+                  @click="handleChartClick(marketShareChart.id)"
                 />
               </div>
             </div>
@@ -103,6 +106,7 @@
                       @refresh="refreshChart(chart.id)"
                       @remove="handleRemoveChart(chart.id)"
                       @animation-end="handleAnimationEnd(chart.id)"
+                      @click="handleChartClick(chart.id)"
                     />
                   </div>
                 </div>
@@ -125,6 +129,15 @@
         </div>
       </Transition>
     </Teleport>
+
+    <ChartDetailDrawer
+      :visible="chartDetailDrawerVisible"
+      :detail-data="chartDetailData"
+      :loading="chartDetailLoading"
+      :is-dark="isDark"
+      @close="store.closeChartDetail"
+      @refresh="store.refreshChartDetail"
+    />
   </div>
 </template>
 
@@ -139,9 +152,10 @@ import RegionOverview from './components/RegionOverview.vue';
 import AlertPanel from './components/AlertPanel.vue';
 import RegionCompare from './components/RegionCompare.vue';
 import RegionCompareSkeleton from './components/RegionCompareSkeleton.vue';
+import ChartDetailDrawer from './components/ChartDetailDrawer.vue';
 
 const store = useDashboardStore();
-const { dashboard, isDark, regionOverview, alerts, highlightedChartId, compareMode, compareModeLoading, comparisonData, comparisonVersion } = storeToRefs(store);
+const { dashboard, isDark, regionOverview, alerts, highlightedChartId, compareMode, compareModeLoading, comparisonData, comparisonVersion, chartDetailDrawerVisible, chartDetailData, chartDetailLoading } = storeToRefs(store);
 
 watch(() => compareMode.value.enabled, (newVal) => {
   if (newVal) {
@@ -285,6 +299,10 @@ function handleLocateToChart(chartId: string) {
       }
     }, 100);
   }
+}
+
+function handleChartClick(chartId: string) {
+  store.openChartDetail(chartId);
 }
 
 onMounted(() => {

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, nextTick, watch } from 'vue';
-import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName, DashboardScheme, FilterConfig } from '../types';
-import { generateRegionData, generateAlerts, generateMockAlerts, generateScatterData, generateHeatmapData } from '../mock/data';
+import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName, DashboardScheme, FilterConfig, ChartDetailData } from '../types';
+import { generateRegionData, generateAlerts, generateMockAlerts, generateScatterData, generateHeatmapData, generateChartDetailData } from '../mock/data';
 
 const SCHEMES_STORAGE_KEY = 'dashboard-schemes';
 const CURRENT_SCHEME_KEY = 'dashboard-current-scheme-id';
@@ -234,6 +234,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const highlightedChartId = ref<string | null>(null);
   const alertAutoRefresh = ref(true);
   const lastAlertUpdate = ref<string>('');
+  const chartDetailDrawerVisible = ref(false);
+  const selectedChartId = ref<string | null>(null);
+  const chartDetailData = ref<ChartDetailData | null>(null);
+  const chartDetailLoading = ref(false);
 
   const currentRegion = computed(() => {
     const regionFilter = dashboard.value.filters.find(f => f.field === 'region');
@@ -934,6 +938,55 @@ export const useDashboardStore = defineStore('dashboard', () => {
   function setHighlightedChart(chartId: string | null) {
     highlightedChartId.value = chartId;
   }
+
+  function getChartDimension(chartId: string): DataDimension {
+    const chart = dashboard.value.charts.find(c => c.id === chartId);
+    if (!chart) return 'salesTrend';
+    if (chart.dataDimension) return chart.dataDimension;
+    if (chartId === 'chart-1') return 'salesTrend';
+    if (chartId === 'chart-2') return 'categorySales';
+    if (chartId === 'chart-3') return 'marketShare';
+    return 'salesTrend';
+  }
+
+  async function openChartDetail(chartId: string) {
+    const chart = dashboard.value.charts.find(c => c.id === chartId);
+    if (!chart) return;
+
+    chartDetailLoading.value = true;
+    selectedChartId.value = chartId;
+    chartDetailDrawerVisible.value = true;
+
+    try {
+      await nextTick();
+      const dimension = getChartDimension(chartId);
+      const region = currentRegion.value;
+      const regionData = regionDataCache.value[region] || generateRegionData(region);
+      chartDetailData.value = generateChartDetailData(
+        chartId,
+        chart.title,
+        chart.type,
+        dimension,
+        regionData
+      );
+    } finally {
+      chartDetailLoading.value = false;
+    }
+  }
+
+  function closeChartDetail() {
+    chartDetailDrawerVisible.value = false;
+    setTimeout(() => {
+      selectedChartId.value = null;
+      chartDetailData.value = null;
+    }, 300);
+  }
+
+  function refreshChartDetail() {
+    if (selectedChartId.value) {
+      openChartDetail(selectedChartId.value);
+    }
+  }
   
   function toggleAlertAutoRefresh() {
     alertAutoRefresh.value = !alertAutoRefresh.value;
@@ -1022,6 +1075,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     alerts, unreadAlerts, highRiskAlerts, unreadHighRiskCount,
     alertsByLevel, alertsByType,
     highlightedChartId, alertAutoRefresh, lastAlertUpdate,
+    chartDetailDrawerVisible, selectedChartId, chartDetailData, chartDetailLoading,
     compareMode, compareModeLoading, comparisonData, comparisonVersion, regionDataA, regionDataB,
     schemes, currentSchemeId, currentScheme, schemeLoading,
     saveScheme, applyScheme, deleteScheme, renameScheme, checkSchemeNameExists, clearCurrentScheme,
@@ -1029,6 +1083,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     refreshRegionData, updateChartsForRegion,
     refreshAlerts, markAlertAsRead, markAllAlertsAsRead,
     dismissAlert, clearAllAlerts, setHighlightedChart, toggleAlertAutoRefresh,
+    openChartDetail, closeChartDetail, refreshChartDetail,
     addCustomChart, refreshCustomChart, generateChartOption,
     toggleCompareMode, setCompareRegion, refreshComparisonData, ensureCompareDataLoaded
   };

@@ -8,7 +8,8 @@
       { 'is-loading': isRefreshing },
       { 'chart-enter': isNew }
     ]" 
-    class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 transition-all duration-300"
+    class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 transition-all duration-300 cursor-pointer hover:shadow-lg hover:-translate-y-0.5"
+    @click="handleCardClick"
   >
     <div class="flex justify-between items-center mb-3">
       <div class="flex items-center gap-2">
@@ -28,7 +29,7 @@
       </div>
       <div class="flex gap-2">
         <button 
-          @click="handleRefresh" 
+          @click.stop="handleRefresh" 
           :disabled="isRefreshing"
           :class="[
             'text-xs flex items-center gap-1 transition-colors',
@@ -39,7 +40,7 @@
           {{ isRefreshing ? '刷新中...' : '刷新' }}
         </button>
         <button 
-          @click="showDeleteConfirm = true" 
+          @click.stop="showDeleteConfirm = true" 
           class="text-gray-400 hover:text-red-500 text-xs"
         >
           删除
@@ -75,13 +76,13 @@
             <p class="text-gray-600 dark:text-gray-300 mb-6">确定要删除图表「{{ title }}」吗？此操作无法撤销。</p>
             <div class="flex justify-end gap-3">
               <button 
-                @click="showDeleteConfirm = false"
+                @click.stop="showDeleteConfirm = false"
                 class="px-4 py-2 text-sm border rounded-lg hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 dark:text-gray-300"
               >
                 取消
               </button>
               <button 
-                @click="confirmDelete"
+                @click.stop="confirmDelete"
                 class="px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600"
               >
                 确认删除
@@ -121,7 +122,7 @@ const props = defineProps<{
   isNew?: boolean;
 }>();
 
-const emit = defineEmits(['refresh', 'remove', 'animationEnd']);
+const emit = defineEmits(['refresh', 'remove', 'animationEnd', 'click']);
 
 const chartReady = ref(false);
 const isRefreshing = ref(false);
@@ -164,6 +165,11 @@ function handleRefresh() {
 function confirmDelete() {
   showDeleteConfirm.value = false;
   emit('remove');
+}
+
+function handleCardClick() {
+  if (showDeleteConfirm.value) return;
+  emit('click');
 }
 
 onMounted(() => {
