@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Dashboard, ChartConfig, RegionData } from '../types';
-import { generateRegionData } from '../mock/data';
+import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel } from '../types';
+import { generateRegionData, generateAlerts, generateMockAlerts } from '../mock/data';
 
 export const useDashboardStore = defineStore('dashboard', () => {
   const dashboard = ref<Dashboard>({
@@ -71,6 +71,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   const regionDataCache = ref<Record<string, RegionData>>({});
   const regionUpdateFlag = ref(0);
+  
+  const alerts = ref<Alert[]>([]);
+  const highlightedChartId = ref<string | null>(null);
+  const alertAutoRefresh = ref(true);
+  const lastAlertUpdate = ref<string>('');
 
   const currentRegion = computed(() => {
     const regionFilter = dashboard.value.filters.find(f => f.field === 'region');
@@ -92,6 +97,22 @@ export const useDashboardStore = defineStore('dashboard', () => {
   });
 
   const isDark = computed(() => dashboard.value.theme === 'dark');
+  
+  const unreadAlerts = computed(() => alerts.value.filter(a => !a.isRead));
+  const highRiskAlerts = computed(() => alerts.value.filter(a => a.level === 'high'));
+  const unreadHighRiskCount = computed(() => highRiskAlerts.value.filter(a => !a.isRead).length);
+  
+  const alertsByLevel = computed(() => ({
+    high: alerts.value.filter(a => a.level === 'high'),
+    medium: alerts.value.filter(a => a.level === 'medium'),
+    low: alerts.value.filter(a => a.level === 'low')
+  }));
+  
+  const alertsByType = computed(() => ({
+    abnormal_fluctuation: alerts.value.filter(a => a.type === 'abnormal_fluctuation'),
+    continuous_decline: alerts.value.filter(a => a.type === 'continuous_decline'),
+    surge: alerts.value.filter(a => a.type === 'surge')
+  }));
 
   function toWan(num: number): number {
     return Number((num / 10000).toFixed(1));
@@ -186,14 +207,75 @@ export const useDashboardStore = defineStore('dashboard', () => {
     regionDataCache.value[region] = generateRegionData(region);
     regionUpdateFlag.value++;
     updateChartsForRegion(region);
+    if (alertAutoRefresh.value) {
+      refreshAlerts();
+    }
+  }
+  
+  function refreshAlerts() {
+    const detectedAlerts = generateAlerts(currentRegionData.value);
+    const mockAlerts = generateMockAlerts();
+    
+    const existingIds = new Set(alerts.value.map(a => a.id));
+    const newDetected = detectedAlerts.filter(a => !existingIds.has(a.id));
+    const newMock = mockAlerts.filter(a => !existingIds.has(a.id) && !alerts.value.some(existing => 
+      existing.type === a.type && existing.metricName === a.metricName
+    ));
+    
+    const allAlerts = [...alerts.value, ...newDetected, ...newMock];
+    
+    alerts.value = allAlerts.sort((a, b) => {
+      const levelOrder: Record<AlertLevel, number> = { high: 0, medium: 1, low: 2 };
+      if (levelOrder[a.level] !== levelOrder[b.level]) {
+        return levelOrder[a.level] - levelOrder[b.level];
+      }
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+    
+    lastAlertUpdate.value = new Date().toISOString();
+  }
+  
+  function markAlertAsRead(alertId: string) {
+    const alert = alerts.value.find(a => a.id === alertId);
+    if (alert) {
+      alert.isRead = true;
+    }
+  }
+  
+  function markAllAlertsAsRead() {
+    alerts.value.forEach(alert => {
+      alert.isRead = true;
+    });
+  }
+  
+  function dismissAlert(alertId: string) {
+    alerts.value = alerts.value.filter(a => a.id !== alertId);
+  }
+  
+  function clearAllAlerts() {
+    alerts.value = [];
+  }
+  
+  function setHighlightedChart(chartId: string | null) {
+    highlightedChartId.value = chartId;
+  }
+  
+  function toggleAlertAutoRefresh() {
+    alertAutoRefresh.value = !alertAutoRefresh.value;
   }
 
   updateChartsForRegion('all');
+  refreshAlerts();
 
   return {
     dashboard, isDark,
     currentRegion, currentRegionData, regionOverview,
+    alerts, unreadAlerts, highRiskAlerts, unreadHighRiskCount,
+    alertsByLevel, alertsByType,
+    highlightedChartId, alertAutoRefresh, lastAlertUpdate,
     toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData,
-    refreshRegionData, updateChartsForRegion
+    refreshRegionData, updateChartsForRegion,
+    refreshAlerts, markAlertAsRead, markAllAlertsAsRead,
+    dismissAlert, clearAllAlerts, setHighlightedChart, toggleAlertAutoRefresh
   };
 });

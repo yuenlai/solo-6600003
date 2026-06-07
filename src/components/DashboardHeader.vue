@@ -5,6 +5,22 @@
       <span class="text-sm text-gray-500 dark:text-gray-400">{{ dashboard.name }}</span>
     </div>
     <div class="flex items-center gap-4">
+      <button 
+        @click="scrollToAlerts"
+        class="relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border hover:bg-gray-100 dark:hover:bg-gray-700 dark:border-gray-600 dark:text-gray-300 transition-colors"
+      >
+        <span :class="['relative', { 'animate-bounce': unreadHighRiskCount > 0 }]">🔔</span>
+        <span class="hidden sm:inline">告警中心</span>
+        <span 
+          v-if="unreadAlertsCount > 0"
+          :class="[
+            'absolute -top-1 -right-1 min-w-5 h-5 flex items-center justify-center text-xs font-bold rounded-full text-white',
+            unreadHighRiskCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-orange-500'
+          ]"
+        >
+          {{ unreadAlertsCount > 99 ? '99+' : unreadAlertsCount }}
+        </span>
+      </button>
       <span class="text-xs text-gray-400">图表数量: {{ dashboard.charts.length }}</span>
       <button @click="store.toggleTheme()"
         class="px-3 py-1 rounded text-xs border hover:bg-gray-100 dark:hover:bg-gray-700 dark:border-gray-600 dark:text-gray-300">
@@ -19,11 +35,21 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useDashboardStore } from '../stores/dashboard';
 import { storeToRefs } from 'pinia';
 
 const store = useDashboardStore();
-const { dashboard, isDark } = storeToRefs(store);
+const { dashboard, isDark, alerts, unreadHighRiskCount } = storeToRefs(store);
+
+const unreadAlertsCount = computed(() => alerts.value.filter(a => !a.isRead).length);
+
+function scrollToAlerts() {
+  const alertPanel = document.querySelector('.alert-panel');
+  if (alertPanel) {
+    alertPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
 
 function handleAddChart() {
   const id = `chart-${Date.now()}`;

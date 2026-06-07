@@ -69,3 +69,28 @@ export interface RegionData {
   categorySales: RegionCategorySales;
   marketShare: RegionMarketShare;
 }
+
+export type AlertType = 'abnormal_fluctuation' | 'continuous_decline' | 'surge';
+export type AlertLevel = 'high' | 'medium' | 'low';
+
+export interface Alert {
+  id: string;
+  type: AlertType;
+  level: AlertLevel;
+  title: string;
+  description: string;
+  chartId: string;
+  metricName: string;
+  value: number;
+  threshold: number;
+  changePercent: number;
+  timestamp: string;
+  isRead: boolean;
+  dataPoints?: { timestamp: string; value: number }[];
+}
+
+export interface AlertDetectionConfig {
+  abnormalFluctuationThreshold: number;
+  continuousDeclinePeriods: number;
+  surgeThreshold: number;
+}
