@@ -168,6 +168,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
     schemeLoading.value = true;
     try {
+      const previousCompareEnabled = compareMode.value.enabled;
+      const newCompareEnabled = scheme.compareMode.enabled;
+
       dashboard.value.filters = JSON.parse(JSON.stringify(scheme.filters));
       dashboard.value.charts = JSON.parse(JSON.stringify(scheme.charts));
       compareMode.value = JSON.parse(JSON.stringify(scheme.compareMode));
@@ -179,11 +182,15 @@ export const useDashboardStore = defineStore('dashboard', () => {
         refreshAlerts(true);
       }
 
-      if (compareMode.value.enabled) {
+      if (newCompareEnabled) {
         ensureCompareDataLoaded();
         comparisonVersion.value++;
+        regionUpdateFlag.value++;
+      } else if (previousCompareEnabled && !newCompareEnabled) {
+        regionUpdateFlag.value++;
       }
 
+      comparisonVersion.value++;
       currentSchemeId.value = schemeId;
       await nextTick();
       return true;
@@ -217,6 +224,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   function checkSchemeNameExists(name: string): boolean {
     return schemes.value.some(s => s.name === name);
+  }
+
+  function clearCurrentScheme() {
+    currentSchemeId.value = null;
   }
   
   const alerts = ref<Alert[]>([]);
@@ -447,12 +458,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   function toggleTheme() {
     dashboard.value.theme = dashboard.value.theme === 'light' ? 'dark' : 'light';
+    clearCurrentScheme();
   }
 
   function updateFilter(filterId: string, value: any) {
     const filter = dashboard.value.filters.find(f => f.id === filterId);
     if (filter) {
       filter.value = value;
+      clearCurrentScheme();
       if (filter.field === 'region') {
         regionUpdateFlag.value++;
         updateChartsForRegion(value);
@@ -463,15 +476,20 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   function updateChartGrid(chartId: string, gridArea: ChartConfig['gridArea']) {
     const chart = dashboard.value.charts.find(c => c.id === chartId);
-    if (chart) chart.gridArea = gridArea;
+    if (chart) {
+      chart.gridArea = gridArea;
+      clearCurrentScheme();
+    }
   }
 
   function addChart(chart: ChartConfig) {
     dashboard.value.charts.push(chart);
+    clearCurrentScheme();
   }
 
   function removeChart(chartId: string) {
     dashboard.value.charts = dashboard.value.charts.filter(c => c.id !== chartId);
+    clearCurrentScheme();
   }
 
   function updateChartData(chartId: string, option: Record<string, any>) {
@@ -818,6 +836,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   function addCustomChart(type: ChartConfig['type'], title: string, dimension: DataDimension): ChartConfig {
     const chart = createCustomChart(type, title, dimension);
     dashboard.value.charts.push(chart);
+    clearCurrentScheme();
     return chart;
   }
 
@@ -936,6 +955,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     const newEnabled = !compareMode.value.enabled;
     compareMode.value.enabled = newEnabled;
     comparisonVersion.value++;
+    clearCurrentScheme();
     
     if (newEnabled) {
       compareModeLoading.value = true;
@@ -963,6 +983,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       compareMode.value.regionB = region;
     }
     
+    clearCurrentScheme();
     compareModeLoading.value = true;
     comparisonVersion.value++;
     try {
@@ -1003,7 +1024,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     highlightedChartId, alertAutoRefresh, lastAlertUpdate,
     compareMode, compareModeLoading, comparisonData, comparisonVersion, regionDataA, regionDataB,
     schemes, currentSchemeId, currentScheme, schemeLoading,
-    saveScheme, applyScheme, deleteScheme, renameScheme, checkSchemeNameExists,
+    saveScheme, applyScheme, deleteScheme, renameScheme, checkSchemeNameExists, clearCurrentScheme,
     toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData,
     refreshRegionData, updateChartsForRegion,
     refreshAlerts, markAlertAsRead, markAllAlertsAsRead,

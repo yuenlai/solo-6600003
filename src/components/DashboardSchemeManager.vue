@@ -387,10 +387,6 @@ function handleSaveScheme() {
 
 async function handleApplyScheme(schemeId: string) {
   if (schemeLoading.value) return;
-  if (schemeId === currentSchemeId.value) {
-    showSchemePanel.value = false;
-    return;
-  }
 
   const scheme = schemes.value.find(s => s.id === schemeId);
   if (!scheme) return;
