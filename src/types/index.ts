@@ -1,9 +1,13 @@
+export type DataDimension = 'salesTrend' | 'categorySales' | 'marketShare' | 'ordersTrend' | 'customerGrowth';
+
 export interface ChartConfig {
   id: string;
   type: 'line' | 'bar' | 'pie' | 'scatter' | 'heatmap';
   title: string;
   option: Record<string, any>;
   gridArea: { x: number; y: number; w: number; h: number };
+  isCustom?: boolean;
+  dataDimension?: DataDimension;
 }
 
 export interface Dashboard {

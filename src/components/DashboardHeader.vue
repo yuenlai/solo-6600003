@@ -26,21 +26,31 @@
         class="px-3 py-1 rounded text-xs border hover:bg-gray-100 dark:hover:bg-gray-700 dark:border-gray-600 dark:text-gray-300">
         {{ isDark ? '☀️ 亮色' : '🌙 暗色' }}
       </button>
-      <button @click="handleAddChart"
+      <button @click="showModal = true"
         class="px-3 py-1 rounded text-xs bg-primary-500 text-white hover:bg-primary-600">
         + 添加图表
       </button>
     </div>
   </header>
+
+  <CreateChartModal 
+    :visible="showModal" 
+    @close="showModal = false"
+    @create="handleChartCreated"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 import { useDashboardStore } from '../stores/dashboard';
 import { storeToRefs } from 'pinia';
+import CreateChartModal from './CreateChartModal.vue';
+import type { ChartConfig } from '../types';
 
 const store = useDashboardStore();
 const { dashboard, isDark, alerts, unreadHighRiskCount } = storeToRefs(store);
+
+const showModal = ref(false);
 
 const unreadAlertsCount = computed(() => alerts.value.filter(a => !a.isRead).length);
 
@@ -51,19 +61,13 @@ function scrollToAlerts() {
   }
 }
 
-function handleAddChart() {
-  const id = `chart-${Date.now()}`;
-  store.addChart({
-    id,
-    type: 'bar',
-    title: '新图表',
-    gridArea: { x: 0, y: 8, w: 6, h: 4 },
-    option: {
-      xAxis: { type: 'category', data: ['A', 'B', 'C', 'D'] },
-      yAxis: { type: 'value' },
-      series: [{ data: [120, 200, 150, 80], type: 'bar' }],
-      tooltip: { trigger: 'axis' }
+function handleChartCreated(chart: ChartConfig) {
+  setTimeout(() => {
+    const elementId = `chart-${chart.id}`;
+    const chartElement = document.getElementById(elementId);
+    if (chartElement) {
+      chartElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  });
+  }, 100);
 }
 </script>

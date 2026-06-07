@@ -55,6 +55,25 @@
             />
           </div>
         </div>
+
+        <template v-for="(row, _index) in customChartRows" :key="_index">
+          <div class="chart-row">
+            <template v-for="chart in row" :key="chart.id">
+              <div :class="row.length === 1 ? 'chart-item-full' : 'chart-item'">
+                <ChartCard
+                  :chart-id="chart.id"
+                  :title="chart.title"
+                  :chart-option="chart.option"
+                  :is-dark="isDark"
+                  :is-highlighted="highlightedChartId === chart.id"
+                  :alert-count="getChartAlertCount(chart.id)"
+                  @refresh="refreshChart(chart.id)"
+                  @remove="handleRemoveChart(chart.id)"
+                />
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
     </main>
   </div>
@@ -79,14 +98,33 @@ const salesTrendChart = computed(() => dashboard.value.charts.find(c => c.id ===
 const categoryChart = computed(() => dashboard.value.charts.find(c => c.id === 'chart-2'));
 const marketShareChart = computed(() => dashboard.value.charts.find(c => c.id === 'chart-3'));
 
+const customCharts = computed(() => dashboard.value.charts.filter(c => c.isCustom));
+
+const customChartRows = computed(() => {
+  const rows: typeof customCharts.value[] = [];
+  for (let i = 0; i < customCharts.value.length; i += 2) {
+    rows.push(customCharts.value.slice(i, i + 2));
+  }
+  return rows;
+});
+
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
-function refreshChart(_chartId: string) {
-  store.refreshRegionData();
+function refreshChart(chartId: string) {
+  const chart = dashboard.value.charts.find(c => c.id === chartId);
+  if (chart && chart.isCustom) {
+    store.refreshCustomChart(chartId);
+  } else {
+    store.refreshRegionData();
+  }
 }
 
 function handleRefreshOverview() {
   store.refreshRegionData();
+}
+
+function handleRemoveChart(chartId: string) {
+  store.removeChart(chartId);
 }
 
 function getChartAlertCount(chartId: string): number {

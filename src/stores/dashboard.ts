@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel } from '../types';
-import { generateRegionData, generateAlerts, generateMockAlerts } from '../mock/data';
+import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension } from '../types';
+import { generateRegionData, generateAlerts, generateMockAlerts, generateScatterData, generateHeatmapData } from '../mock/data';
 
 export const useDashboardStore = defineStore('dashboard', () => {
   const dashboard = ref<Dashboard>({
@@ -203,11 +203,370 @@ export const useDashboardStore = defineStore('dashboard', () => {
     if (chart) chart.option = { ...chart.option, ...option };
   }
 
+  function generateChartOption(type: ChartConfig['type'], dimension: DataDimension, regionData: RegionData): Record<string, any> {
+    const months = regionData.salesTrend.months;
+    const categories = regionData.categorySales.categories;
+    const channels = regionData.marketShare.channels.map(c => c.name);
+
+    const salesData = regionData.salesTrend.sales.map(toWan);
+    const ordersData = regionData.salesTrend.orders.map(toWan);
+    const categorySalesData = regionData.categorySales.sales.map((s, i) => ({
+      value: toWan(s),
+      growth: regionData.categorySales.growth[i]
+    }));
+    const channelData = regionData.marketShare.channels.map(c => ({
+      name: c.name,
+      value: toWan(c.value)
+    }));
+
+    const customerGrowthData = months.map((_, i) => 
+      Math.floor((80 + Math.random() * 40) * (1 + i * 0.05))
+    );
+
+    switch (dimension) {
+      case 'salesTrend':
+        if (type === 'line') {
+          return {
+            xAxis: { type: 'category', data: months },
+            yAxis: { type: 'value', name: '销售额(万)' },
+            series: [{ name: '销售额', data: salesData, type: 'line', smooth: true }],
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['销售额'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'bar') {
+          return {
+            xAxis: { type: 'category', data: months },
+            yAxis: { type: 'value', name: '销售额(万)' },
+            series: [{ name: '销售额', data: salesData, type: 'bar' }],
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['销售额'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'pie') {
+          return {
+            series: [{
+              type: 'pie', radius: ['40%', '70%'],
+              data: months.map((m, i) => ({ name: m, value: salesData[i] }))
+            }],
+            tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)' },
+            legend: { orient: 'vertical', right: 10, top: 'center' }
+          };
+        } else if (type === 'scatter') {
+          return {
+            xAxis: { type: 'value', name: '月份' },
+            yAxis: { type: 'value', name: '销售额(万)' },
+            series: [{
+              type: 'scatter',
+              data: generateScatterData(12).map(p => [p[0] / 10, p[1] * 10])
+            }],
+            tooltip: { trigger: 'item' }
+          };
+        } else if (type === 'heatmap') {
+          return {
+            xAxis: { type: 'category', data: months },
+            yAxis: { type: 'category', data: ['销售额', '订单量', '客户数'] },
+            visualMap: { min: 0, max: 2000, calculable: true, orient: 'horizontal', left: 'center', bottom: 0 },
+            series: [{
+              type: 'heatmap',
+              data: generateHeatmapData(6, 3),
+              label: { show: true }
+            }],
+            tooltip: { trigger: 'item' },
+            grid: { bottom: 60 }
+          };
+        }
+        break;
+
+      case 'ordersTrend':
+        if (type === 'line') {
+          return {
+            xAxis: { type: 'category', data: months },
+            yAxis: { type: 'value', name: '订单数(万)' },
+            series: [{ name: '订单量', data: ordersData, type: 'line', smooth: true, itemStyle: { color: '#52c41a' } }],
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['订单量'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'bar') {
+          return {
+            xAxis: { type: 'category', data: months },
+            yAxis: { type: 'value', name: '订单数(万)' },
+            series: [{ name: '订单量', data: ordersData, type: 'bar', itemStyle: { color: '#52c41a' } }],
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['订单量'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'pie') {
+          return {
+            series: [{
+              type: 'pie', radius: ['40%', '70%'],
+              data: months.map((m, i) => ({ name: m, value: ordersData[i] }))
+            }],
+            tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)' },
+            legend: { orient: 'vertical', right: 10, top: 'center' }
+          };
+        } else if (type === 'scatter') {
+          return {
+            xAxis: { type: 'value', name: '销售额(万)' },
+            yAxis: { type: 'value', name: '订单数(万)' },
+            series: [{
+              type: 'scatter',
+              data: salesData.map((s, i) => [s, ordersData[i]])
+            }],
+            tooltip: { trigger: 'item', formatter: (params: any) => `销售额: ${params.data[0]}万<br/>订单数: ${params.data[1]}万` }
+          };
+        } else if (type === 'heatmap') {
+          return {
+            xAxis: { type: 'category', data: months },
+            yAxis: { type: 'category', data: ['订单量', '增长率', '客单价'] },
+            visualMap: { min: 0, max: 500, calculable: true, orient: 'horizontal', left: 'center', bottom: 0 },
+            series: [{
+              type: 'heatmap',
+              data: generateHeatmapData(6, 3),
+              label: { show: true }
+            }],
+            tooltip: { trigger: 'item' },
+            grid: { bottom: 60 }
+          };
+        }
+        break;
+
+      case 'categorySales':
+        if (type === 'bar') {
+          return {
+            xAxis: { type: 'category', data: categories },
+            yAxis: { type: 'value', name: '销售额(万)' },
+            series: [{
+              name: '销售额',
+              data: categorySalesData,
+              type: 'bar',
+              itemStyle: { color: '#1890ff' }
+            }],
+            tooltip: {
+              trigger: 'axis',
+              formatter: (params: any) => {
+                const data = params[0];
+                const growth = data.data && typeof data.data === 'object' ? data.data.growth : 0;
+                const growthText = growth >= 0 ? `+${(growth * 100).toFixed(1)}%` : `${(growth * 100).toFixed(1)}%`;
+                const growthColor = growth >= 0 ? '#52c41a' : '#ff4d4f';
+                return `${data.name}<br/>销售额: ${data.value} 万<br/>同比: <span style="color:${growthColor}">${growthText}</span>`;
+              }
+            },
+            legend: { data: ['销售额'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'line') {
+          return {
+            xAxis: { type: 'category', data: categories },
+            yAxis: { type: 'value', name: '销售额(万)' },
+            series: [{ name: '销售额', data: categorySalesData.map(d => d.value), type: 'line', smooth: true }],
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['销售额'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'pie') {
+          return {
+            series: [{
+              type: 'pie', radius: ['40%', '70%'],
+              data: categories.map((c, i) => ({ name: c, value: categorySalesData[i].value }))
+            }],
+            tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)' },
+            legend: { orient: 'vertical', right: 10, top: 'center' }
+          };
+        } else if (type === 'scatter') {
+          return {
+            xAxis: { type: 'value', name: '销售额(万)' },
+            yAxis: { type: 'value', name: '增长率(%)' },
+            series: [{
+              type: 'scatter',
+              data: categorySalesData.map(d => [d.value, (d.growth * 100).toFixed(1)])
+            }],
+            tooltip: { trigger: 'item', formatter: (params: any) => `销售额: ${params.data[0]}万<br/>增长率: ${params.data[1]}%` }
+          };
+        } else if (type === 'heatmap') {
+          return {
+            xAxis: { type: 'category', data: categories },
+            yAxis: { type: 'category', data: ['销售额', '增长率', '市场占比'] },
+            visualMap: { min: 0, max: 300, calculable: true, orient: 'horizontal', left: 'center', bottom: 0 },
+            series: [{
+              type: 'heatmap',
+              data: generateHeatmapData(5, 3),
+              label: { show: true }
+            }],
+            tooltip: { trigger: 'item' },
+            grid: { bottom: 60 }
+          };
+        }
+        break;
+
+      case 'marketShare':
+        if (type === 'pie') {
+          return {
+            series: [{
+              type: 'pie', radius: ['40%', '70%'],
+              data: channelData
+            }],
+            tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)' },
+            legend: { orient: 'vertical', right: 10, top: 'center' }
+          };
+        } else if (type === 'bar') {
+          return {
+            xAxis: { type: 'category', data: channels },
+            yAxis: { type: 'value', name: '销售额(万)' },
+            series: [{ name: '渠道', data: channelData.map(c => c.value), type: 'bar', itemStyle: { color: '#722ed1' } }],
+            tooltip: { trigger: 'axis', formatter: '{b}: {c}万' },
+            legend: { data: ['渠道'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'line') {
+          return {
+            xAxis: { type: 'category', data: channels },
+            yAxis: { type: 'value', name: '销售额(万)' },
+            series: [{ name: '渠道', data: channelData.map(c => c.value), type: 'line', smooth: true }],
+            tooltip: { trigger: 'axis', formatter: '{b}: {c}万' },
+            legend: { data: ['渠道'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'scatter') {
+          return {
+            xAxis: { type: 'value', name: '渠道指数' },
+            yAxis: { type: 'value', name: '销售额(万)' },
+            series: [{
+              type: 'scatter',
+              data: channelData.map((c, i) => [i + 1, c.value])
+            }],
+            tooltip: { trigger: 'item', formatter: (params: any) => `${channels[params.data[0] - 1]}: ${params.data[1]}万` }
+          };
+        } else if (type === 'heatmap') {
+          return {
+            xAxis: { type: 'category', data: channels },
+            yAxis: { type: 'category', data: ['访问量', '转化率', '客单价'] },
+            visualMap: { min: 0, max: 200, calculable: true, orient: 'horizontal', left: 'center', bottom: 0 },
+            series: [{
+              type: 'heatmap',
+              data: generateHeatmapData(5, 3),
+              label: { show: true }
+            }],
+            tooltip: { trigger: 'item' },
+            grid: { bottom: 60 }
+          };
+        }
+        break;
+
+      case 'customerGrowth':
+        if (type === 'line') {
+          return {
+            xAxis: { type: 'category', data: months },
+            yAxis: { type: 'value', name: '客户数(百)' },
+            series: [{ name: '客户增长', data: customerGrowthData, type: 'line', smooth: true, itemStyle: { color: '#eb2f96' } }],
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['客户增长'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'bar') {
+          return {
+            xAxis: { type: 'category', data: months },
+            yAxis: { type: 'value', name: '客户数(百)' },
+            series: [{ name: '客户增长', data: customerGrowthData, type: 'bar', itemStyle: { color: '#eb2f96' } }],
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['客户增长'], bottom: 0 },
+            grid: { bottom: 40 }
+          };
+        } else if (type === 'pie') {
+          return {
+            series: [{
+              type: 'pie', radius: ['40%', '70%'],
+              data: months.map((m, i) => ({ name: m, value: customerGrowthData[i] }))
+            }],
+            tooltip: { trigger: 'item', formatter: '{b}: {c}百 ({d}%)' },
+            legend: { orient: 'vertical', right: 10, top: 'center' }
+          };
+        } else if (type === 'scatter') {
+          return {
+            xAxis: { type: 'value', name: '订单数(万)' },
+            yAxis: { type: 'value', name: '客户数(百)' },
+            series: [{
+              type: 'scatter',
+              data: ordersData.map((o, i) => [o, customerGrowthData[i]])
+            }],
+            tooltip: { trigger: 'item', formatter: (params: any) => `订单数: ${params.data[0]}万<br/>客户数: ${params.data[1]}百` }
+          };
+        } else if (type === 'heatmap') {
+          return {
+            xAxis: { type: 'category', data: months },
+            yAxis: { type: 'category', data: ['新客户', '复购客户', '活跃度'] },
+            visualMap: { min: 0, max: 150, calculable: true, orient: 'horizontal', left: 'center', bottom: 0 },
+            series: [{
+              type: 'heatmap',
+              data: generateHeatmapData(6, 3),
+              label: { show: true }
+            }],
+            tooltip: { trigger: 'item' },
+            grid: { bottom: 60 }
+          };
+        }
+        break;
+    }
+
+    return {
+      xAxis: { type: 'category', data: ['A', 'B', 'C', 'D'] },
+      yAxis: { type: 'value' },
+      series: [{ data: [100, 200, 150, 80], type: 'bar' }],
+      tooltip: { trigger: 'axis' }
+    };
+  }
+
+  function createCustomChart(type: ChartConfig['type'], title: string, dimension: DataDimension): ChartConfig {
+    const id = `chart-custom-${Date.now()}`;
+    const region = currentRegion.value;
+    const data = regionDataCache.value[region] || generateRegionData(region);
+    
+    const chartsCount = dashboard.value.charts.length;
+    const row = Math.floor(chartsCount / 2) * 4;
+    const col = chartsCount % 2 === 0 ? 0 : 6;
+
+    const chart: ChartConfig = {
+      id,
+      type,
+      title,
+      gridArea: { x: col, y: row + 8, w: 6, h: 4 },
+      option: generateChartOption(type, dimension, data),
+      isCustom: true,
+      dataDimension: dimension
+    };
+
+    return chart;
+  }
+
+  function addCustomChart(type: ChartConfig['type'], title: string, dimension: DataDimension): ChartConfig {
+    const chart = createCustomChart(type, title, dimension);
+    dashboard.value.charts.push(chart);
+    return chart;
+  }
+
+  function refreshCustomChart(chartId: string) {
+    const chart = dashboard.value.charts.find(c => c.id === chartId);
+    if (!chart || !chart.isCustom || !chart.dataDimension) return;
+
+    const region = currentRegion.value;
+    const data = regionDataCache.value[region] || generateRegionData(region);
+    const newOption = generateChartOption(chart.type, chart.dataDimension, data);
+    chart.option = { ...chart.option, ...newOption };
+  }
+
   function refreshRegionData() {
     const region = currentRegion.value;
     regionDataCache.value[region] = generateRegionData(region);
     regionUpdateFlag.value++;
     updateChartsForRegion(region);
+    
+    dashboard.value.charts.forEach(chart => {
+      if (chart.isCustom) {
+        refreshCustomChart(chart.id);
+      }
+    });
+    
     if (alertAutoRefresh.value) {
       refreshAlerts();
     }
@@ -295,6 +654,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData,
     refreshRegionData, updateChartsForRegion,
     refreshAlerts, markAlertAsRead, markAllAlertsAsRead,
-    dismissAlert, clearAllAlerts, setHighlightedChart, toggleAlertAutoRefresh
+    dismissAlert, clearAllAlerts, setHighlightedChart, toggleAlertAutoRefresh,
+    addCustomChart, refreshCustomChart, generateChartOption
   };
 });
