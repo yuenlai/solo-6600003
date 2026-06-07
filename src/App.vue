@@ -59,28 +59,28 @@
         <TransitionGroup name="chart-list" tag="div" class="space-y-4">
           <template v-for="(row, _index) in customChartRows" :key="row.map(c => c.id).join('-')">
             <div class="chart-row">
-              <template v-for="chart in row" :key="chart.id">
-                <div 
-                  :class="[
-                    row.length === 1 ? 'chart-item-full' : 'chart-item',
-                    { 'chart-leaving': deletingChartIds.has(chart.id) }
-                  ]"
-                >
-                  <ChartCard
-                    :chart-id="chart.id"
-                    :title="chart.title"
-                    :chart-option="chart.option"
-                    :is-dark="isDark"
-                    :is-custom="chart.isCustom"
-                    :is-new="newChartIds.has(chart.id)"
-                    :is-highlighted="highlightedChartId === chart.id"
-                    :alert-count="getChartAlertCount(chart.id)"
-                    @refresh="refreshChart(chart.id)"
-                    @remove="handleRemoveChart(chart.id)"
-                    @animation-end="handleAnimationEnd(chart.id)"
-                  />
-                </div>
-              </template>
+              <div 
+                v-for="chart in row" 
+                :key="chart.id"
+                :class="[
+                  row.length === 1 ? 'chart-item-full' : 'chart-item',
+                  { 'chart-leaving': deletingChartIds.has(chart.id) }
+                ]"
+              >
+                <ChartCard
+                  :chart-id="chart.id"
+                  :title="chart.title"
+                  :chart-option="chart.option"
+                  :is-dark="isDark"
+                  :is-custom="chart.isCustom"
+                  :is-new="newChartIds.has(chart.id)"
+                  :is-highlighted="highlightedChartId === chart.id"
+                  :alert-count="getChartAlertCount(chart.id)"
+                  @refresh="refreshChart(chart.id)"
+                  @remove="handleRemoveChart(chart.id)"
+                  @animation-end="handleAnimationEnd(chart.id)"
+                />
+              </div>
             </div>
           </template>
         </TransitionGroup>
@@ -149,15 +149,19 @@ function showToast(message: string, type: 'success' | 'info' = 'success') {
 
 function handleNewChartCreated(chartId: string) {
   newChartIds.value.add(chartId);
-  showToast('✨ 图表创建成功！');
+  showToast('✨ 图表创建成功！新卡片已添加到下方');
   
   setTimeout(() => {
     const elementId = `chart-${chartId}`;
     const chartElement = document.getElementById(elementId);
     if (chartElement) {
       chartElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      chartElement.classList.add('create-flash');
+      setTimeout(() => {
+        chartElement.classList.remove('create-flash');
+      }, 1000);
     }
-  }, 300);
+  }, 100);
 }
 
 function handleAnimationEnd(chartId: string) {
@@ -169,10 +173,20 @@ function refreshChart(chartId: string) {
   if (chart && chart.isCustom) {
     store.refreshCustomChart(chartId);
     setTimeout(() => {
-      showToast('🔄 数据已刷新', 'info');
+      showToast('🔄 数据已刷新，数值已更新', 'info');
+      
+      const elementId = `chart-${chartId}`;
+      const chartElement = document.getElementById(elementId);
+      if (chartElement) {
+        chartElement.classList.add('refresh-flash');
+        setTimeout(() => {
+          chartElement.classList.remove('refresh-flash');
+        }, 600);
+      }
     }, 600);
   } else {
     store.refreshRegionData();
+    showToast('🔄 全局数据已刷新', 'info');
   }
 }
 
@@ -182,13 +196,19 @@ function handleRefreshOverview() {
 
 function handleRemoveChart(chartId: string) {
   deletingChartIds.value.add(chartId);
-  showToast('🗑️ 图表已删除', 'info');
+  showToast('🗑️ 图表已删除，从布局中移除', 'info');
+  
+  const elementId = `chart-${chartId}`;
+  const chartElement = document.getElementById(elementId);
+  if (chartElement) {
+    chartElement.classList.add('delete-flash');
+  }
   
   setTimeout(() => {
     store.removeChart(chartId);
     deletingChartIds.value.delete(chartId);
     newChartIds.value.delete(chartId);
-  }, 300);
+  }, 400);
 }
 
 function getChartAlertCount(chartId: string): number {
@@ -335,6 +355,63 @@ onUnmounted(() => {
   50% { 
     box-shadow: 0 0 0 12px rgba(239, 68, 68, 0.4), 0 0 60px rgba(239, 68, 68, 0.8), 0 20px 60px rgba(0, 0, 0, 0.4);
     transform: scale(1.1);
+  }
+}
+
+:deep(.create-flash) {
+  animation: create-flash-animation 1s ease-out !important;
+}
+
+@keyframes create-flash-animation {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.8), 0 0 40px rgba(34, 197, 94, 0.6);
+    transform: scale(1.02);
+  }
+  50% {
+    box-shadow: 0 0 0 15px rgba(34, 197, 94, 0), 0 0 80px rgba(34, 197, 94, 0.3);
+    transform: scale(1.05);
+  }
+  100% {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transform: scale(1);
+  }
+}
+
+:deep(.delete-flash) {
+  animation: delete-flash-animation 0.4s ease-in forwards !important;
+}
+
+@keyframes delete-flash-animation {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8);
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.4);
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+:deep(.refresh-flash) {
+  animation: refresh-flash-animation 0.6s ease-out !important;
+}
+
+@keyframes refresh-flash-animation {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.8);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.5);
+  }
+  100% {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
 }
 </style>

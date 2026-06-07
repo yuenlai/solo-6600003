@@ -64,9 +64,9 @@ export function generateHeatmapData(xLen: number, yLen: number): [number, number
   return data;
 }
 
-export function generateRegionOverview(region: string): RegionOverview {
+export function generateRegionOverview(region: string, forceRandom: boolean = false): RegionOverview {
   const baseline = REGION_BASELINES[region] || REGION_BASELINES['all'];
-  const rand = seededRandom(regionSeed(region));
+  const rand = forceRandom ? () => Math.random() : seededRandom(regionSeed(region));
   const baseSales = Math.floor(5000000 * baseline.sales * (0.9 + rand() * 0.2));
   const baseOrders = Math.floor(120000 * baseline.sales * (0.9 + rand() * 0.2));
   

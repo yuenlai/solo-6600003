@@ -550,9 +550,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
     if (!chart || !chart.isCustom || !chart.dataDimension) return;
 
     const region = currentRegion.value;
-    const data = regionDataCache.value[region] || generateRegionData(region);
+    const data = generateRegionData(region);
+    regionDataCache.value[region] = data;
+    
     const newOption = generateChartOption(chart.type, chart.dataDimension, data);
-    chart.option = { ...chart.option, ...newOption };
+    chart.option = { ...newOption };
   }
 
   function refreshRegionData() {
