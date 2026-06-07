@@ -29,6 +29,18 @@
       </div>
       <div class="flex gap-2">
         <button 
+          v-if="isTrendChart"
+          @click.stop="toggleReplayPanel"
+          :class="[
+            'text-xs flex items-center gap-1 transition-colors',
+            showReplayPanel ? 'text-primary-500 bg-primary-50 dark:bg-primary-900/30 px-2 py-0.5 rounded' : 'text-gray-400 hover:text-primary-500'
+          ]"
+          :title="showReplayPanel ? '关闭回放' : '趋势回放'"
+        >
+          <span>{{ showReplayPanel ? '⏸️' : '▶️' }}</span>
+          {{ showReplayPanel ? '回放中' : '回放' }}
+        </button>
+        <button 
           @click.stop="handleRefresh" 
           :disabled="isRefreshing"
           :class="[
@@ -60,12 +72,24 @@
       </div>
       <v-chart
         v-if="chartReady"
-        :option="chartOption"
+        :option="currentChartOption"
         :theme="isDark ? 'dark' : ''"
         autoresize
         style="height: 100%; width: 100%;"
       />
     </div>
+
+    <Transition name="replay-slide">
+      <TrendReplay
+        v-if="showReplayPanel && isTrendChart"
+        ref="trendReplayRef"
+        :original-option="chartOption"
+        :chart-type="chartType as 'line' | 'bar'"
+        :is-dark="isDark"
+        @update:option="handleReplayOptionUpdate"
+        @state-change="handleReplayStateChange"
+      />
+    </Transition>
 
     <Teleport to="body">
       <Transition name="fade">
@@ -96,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, onUnmounted, watch } from 'vue';
+import { ref, onMounted, nextTick, onUnmounted, watch, computed } from 'vue';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -105,6 +129,7 @@ import {
   TitleComponent, TooltipComponent, LegendComponent,
   GridComponent, VisualMapComponent
 } from 'echarts/components';
+import TrendReplay from './TrendReplay.vue';
 
 use([
   CanvasRenderer, LineChart, BarChart, PieChart, ScatterChart, HeatmapChart,
@@ -120,6 +145,7 @@ const props = defineProps<{
   alertCount?: number;
   isCustom?: boolean;
   isNew?: boolean;
+  chartType?: 'line' | 'bar' | 'pie' | 'scatter' | 'heatmap';
 }>();
 
 const emit = defineEmits(['refresh', 'remove', 'animationEnd', 'click']);
@@ -128,6 +154,10 @@ const chartReady = ref(false);
 const isRefreshing = ref(false);
 const showDeleteConfirm = ref(false);
 const refreshText = ref('正在刷新数据...');
+const showReplayPanel = ref(false);
+const activeChartOption = ref<Record<string, any> | null>(null);
+const isReplaying = ref(false);
+const trendReplayRef = ref<InstanceType<typeof TrendReplay> | null>(null);
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let _animationTimer: ReturnType<typeof setTimeout> | null = null;
@@ -138,6 +168,47 @@ const refreshMessages = [
   '正在更新可视化...',
   '数据加载中...'
 ];
+
+const isTrendChart = computed(() => {
+  return props.chartType === 'line' || props.chartType === 'bar';
+});
+
+const currentChartOption = computed(() => {
+  if (activeChartOption.value) {
+    return activeChartOption.value;
+  }
+  return props.chartOption;
+});
+
+function toggleReplayPanel() {
+  showReplayPanel.value = !showReplayPanel.value;
+  if (showReplayPanel.value) {
+    nextTick(() => {
+      trendReplayRef.value?.start();
+    });
+  } else {
+    activeChartOption.value = null;
+    isReplaying.value = false;
+  }
+}
+
+function handleReplayOptionUpdate(option: Record<string, any>) {
+  activeChartOption.value = option;
+}
+
+function handleReplayStateChange(state: any) {
+  isReplaying.value = state.isPlaying;
+  if (state.stopped) {
+    activeChartOption.value = null;
+    showReplayPanel.value = false;
+  }
+}
+
+watch(() => props.chartOption, () => {
+  if (!isReplaying.value) {
+    activeChartOption.value = null;
+  }
+}, { deep: true });
 
 watch(() => props.isNew, (val) => {
   if (val) {
@@ -286,5 +357,16 @@ onUnmounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.replay-slide-enter-active,
+.replay-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.replay-slide-enter-from,
+.replay-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

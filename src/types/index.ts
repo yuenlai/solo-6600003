@@ -215,6 +215,26 @@ export interface ChartDetailData {
   };
 }
 
+export interface TrendReplayState {
+  isPlaying: boolean;
+  isPaused: boolean;
+  currentIndex: number;
+  totalPoints: number;
+  currentTimeLabel: string;
+  currentValues: { seriesName: string; value: number }[];
+  speed: number;
+}
+
+export interface TrendReplaySeriesData {
+  name: string;
+  data: number[];
+}
+
+export interface TrendReplayData {
+  labels: string[];
+  series: TrendReplaySeriesData[];
+}
+
 export interface DashboardScheme {
   id: string;
   name: string;

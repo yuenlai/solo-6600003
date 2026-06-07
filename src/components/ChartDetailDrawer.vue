@@ -182,6 +182,16 @@
                   >
                     {{ detailData.recentChange.trend === 'up' ? '增长' : detailData.recentChange.trend === 'down' ? '下降' : '持平' }}
                   </span>
+                  <button
+                    @click="toggleDetailReplay"
+                    :class="[
+                      'text-xs flex items-center gap-1 px-2 py-1 rounded transition-colors',
+                      showDetailReplay ? 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-600 dark:text-gray-300 dark:hover:bg-gray-500'
+                    ]"
+                  >
+                    <span>{{ showDetailReplay ? '⏸️' : '▶️' }}</span>
+                    {{ showDetailReplay ? '关闭回放' : '趋势回放' }}
+                  </button>
                 </div>
               </div>
               <div class="p-4 space-y-4">
@@ -218,12 +228,25 @@
 
                 <div class="h-48 bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
                   <v-chart
-                    :option="trendChartOption"
+                    :option="currentTrendOption"
                     :theme="isDark ? 'dark' : ''"
                     autoresize
                     style="height: 100%; width: 100%;"
                   />
                 </div>
+
+                <Transition name="replay-slide">
+                  <TrendReplay
+                    v-if="showDetailReplay"
+                    ref="detailTrendReplayRef"
+                    :original-option="trendChartOption"
+                    chart-type="line"
+                    :is-dark="isDark"
+                    :format-value="formatValue"
+                    @update:option="handleDetailReplayOptionUpdate"
+                    @state-change="handleDetailReplayStateChange"
+                  />
+                </Transition>
 
                 <div class="p-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
                   <p class="text-xs text-indigo-600 dark:text-indigo-400 mb-1 flex items-center gap-1">
@@ -245,13 +268,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, ref } from 'vue';
+import { computed, watch, ref, nextTick } from 'vue';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart, BarChart } from 'echarts/charts';
 import { TitleComponent, TooltipComponent, GridComponent } from 'echarts/components';
 import type { ChartDetailData } from '../types';
+import TrendReplay from './TrendReplay.vue';
 
 use([
   CanvasRenderer, LineChart, BarChart,
@@ -268,6 +292,10 @@ const props = defineProps<{
 const emit = defineEmits(['close', 'refresh']);
 
 const chartReady = ref(false);
+const showDetailReplay = ref(false);
+const activeTrendOption = ref<Record<string, any> | null>(null);
+const detailTrendReplayRef = ref<InstanceType<typeof TrendReplay> | null>(null);
+const isDetailReplaying = ref(false);
 
 watch(() => props.visible, (val) => {
   if (val) {
@@ -288,6 +316,37 @@ function formatValue(value: number): string {
     return (value / 10000).toFixed(1) + '万';
   }
   return value.toLocaleString();
+}
+
+const currentTrendOption = computed(() => {
+  if (activeTrendOption.value) {
+    return activeTrendOption.value;
+  }
+  return trendChartOption.value;
+});
+
+function toggleDetailReplay() {
+  showDetailReplay.value = !showDetailReplay.value;
+  if (showDetailReplay.value) {
+    nextTick(() => {
+      detailTrendReplayRef.value?.start();
+    });
+  } else {
+    activeTrendOption.value = null;
+    isDetailReplaying.value = false;
+  }
+}
+
+function handleDetailReplayOptionUpdate(option: Record<string, any>) {
+  activeTrendOption.value = option;
+}
+
+function handleDetailReplayStateChange(state: any) {
+  isDetailReplaying.value = state.isPlaying;
+  if (state.stopped) {
+    activeTrendOption.value = null;
+    showDetailReplay.value = false;
+  }
 }
 
 const trendChartOption = computed(() => {
@@ -394,5 +453,16 @@ function handleRefresh() {
 .drawer-enter-from > div:first-child,
 .drawer-leave-to > div:first-child {
   opacity: 0;
+}
+
+.replay-slide-enter-active,
+.replay-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.replay-slide-enter-from,
+.replay-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>
