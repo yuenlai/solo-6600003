@@ -85,26 +85,48 @@ export function generateRegionOverview(region: string): RegionOverview {
 
 export function generateRegionSalesTrend(region: string): { months: string[]; sales: number[]; orders: number[] } {
   const baseline = REGION_BASELINES[region] || REGION_BASELINES['all'];
-  const rand = seededRandom(regionSeed(region) + 100);
   
-  const sales = MONTHS.map((_, i) => {
-    const base = 600000 + i * 50000;
-    const variation = 0.85 + rand() * 0.3;
-    return Math.floor(base * baseline.sales * variation);
-  });
+  const baseSales = 600000;
+  const sales: number[] = [];
   
-  const orders = MONTHS.map((_, i) => {
-    const base = 15000 + i * 1200;
-    const variation = 0.85 + rand() * 0.3;
-    return Math.floor(base * baseline.sales * variation);
-  });
+  for (let i = 0; i < MONTHS.length; i++) {
+    let value = baseSales + i * 50000;
+    
+    if (i === 2) {
+      value = value * 1.4;
+    } else if (i === 3) {
+      value = value * 0.65;
+    } else if (i >= 4) {
+      value = baseSales + 4 * 50000 - (i - 3) * 80000;
+    }
+    
+    value = value * baseline.sales * (0.9 + Math.random() * 0.2);
+    sales.push(Math.floor(Math.max(100000, value)));
+  }
+  
+  const baseOrders = 15000;
+  const orders: number[] = [];
+  
+  for (let i = 0; i < MONTHS.length; i++) {
+    let value = baseOrders + i * 1200;
+    
+    if (i === 2) {
+      value = value * 1.35;
+    } else if (i === 3) {
+      value = value * 0.6;
+    } else if (i >= 4) {
+      value = baseOrders + 4 * 1200 - (i - 3) * 20000;
+    }
+    
+    value = value * baseline.sales * (0.9 + Math.random() * 0.2);
+    orders.push(Math.floor(Math.max(5000, value)));
+  }
   
   return { months: MONTHS, sales, orders };
 }
 
 export function generateRegionCategorySales(region: string): { categories: string[]; sales: number[]; growth: number[] } {
   const baseline = REGION_BASELINES[region] || REGION_BASELINES['all'];
-  const rand = seededRandom(regionSeed(region) + 200);
   
   const categoryWeights: Record<string, number> = {
     '电子产品': region === '华东' ? 1.4 : region === '华南' ? 1.2 : 1.0,
@@ -114,13 +136,25 @@ export function generateRegionCategorySales(region: string): { categories: strin
     '运动': region === '华东' ? 1.25 : region === '西南' ? 1.15 : 1.0
   };
   
-  const sales = CATEGORIES.map(cat => {
-    const base = 1500000 + rand() * 500000;
-    return Math.floor(base * baseline.sales * (categoryWeights[cat] || 1.0));
+  const baseValues = [1500000, 1200000, 1000000, 800000, 600000];
+  const sales = CATEGORIES.map((cat, i) => {
+    let value = baseValues[i] * baseline.sales * (categoryWeights[cat] || 1.0);
+    
+    if (cat === '电子产品') {
+      value = value * 1.6;
+    } else if (cat === '服装') {
+      value = value * 0.9;
+    }
+    
+    value = value * (0.9 + Math.random() * 0.2);
+    return Math.floor(value);
   });
   
-  const growth = CATEGORIES.map(() => {
-    return baseline.growth + (rand() - 0.5) * 0.1;
+  const growth = CATEGORIES.map((cat, _i) => {
+    if (cat === '电子产品') {
+      return 0.5 + Math.random() * 0.2;
+    }
+    return baseline.growth + (Math.random() - 0.5) * 0.1;
   });
   
   return { categories: CATEGORIES, sales, growth };
@@ -128,7 +162,6 @@ export function generateRegionCategorySales(region: string): { categories: strin
 
 export function generateRegionMarketShare(region: string): { channels: { name: string; value: number }[] } {
   const baseline = REGION_BASELINES[region] || REGION_BASELINES['all'];
-  const rand = seededRandom(regionSeed(region) + 300);
   
   const channelWeights: Record<string, Record<string, number>> = {
     '华东': { '搜索引擎': 1.1, '直接访问': 1.0, '邮件营销': 1.2, '联盟广告': 0.9, '视频广告': 1.15 },
@@ -140,11 +173,20 @@ export function generateRegionMarketShare(region: string): { channels: { name: s
   
   const weights = channelWeights[region] || channelWeights['all'];
   
-  const channels = CHANNELS.map(name => {
-    const base = 800000 + rand() * 300000;
+  const baseValues = [1000000, 800000, 600000, 500000, 300000];
+  const channels = CHANNELS.map((name, i) => {
+    let value = baseValues[i] * baseline.sales * (weights[name] || 1.0);
+    
+    if (name === '视频广告') {
+      value = value * 1.8;
+    } else if (name === '邮件营销') {
+      value = value * 0.7;
+    }
+    
+    value = value * (0.9 + Math.random() * 0.2);
     return {
       name,
-      value: Math.floor(base * baseline.sales * (weights[name] || 1.0))
+      value: Math.floor(value)
     };
   });
   
@@ -199,21 +241,6 @@ function detectContinuousDecline(values: number[], periods: number = 3): { isAle
   return { isAlert: false, declineCount, changePercent: -maxDecline };
 }
 
-function detectSurge(values: number[], threshold: number = 0.5): { isAlert: boolean; changePercent: number; index: number } {
-  if (values.length < 2) return { isAlert: false, changePercent: 0, index: -1 };
-  
-  for (let i = 1; i < values.length; i++) {
-    const prev = values[i - 1];
-    const curr = values[i];
-    if (prev === 0) continue;
-    const changePercent = (curr - prev) / prev;
-    if (changePercent > threshold) {
-      return { isAlert: true, changePercent, index: i };
-    }
-  }
-  return { isAlert: false, changePercent: 0, index: -1 };
-}
-
 function determineLevel(changePercent: number, type: AlertType): AlertLevel {
   const absChange = Math.abs(changePercent);
   if (type === 'continuous_decline') {
@@ -234,23 +261,42 @@ function createAlert(
   threshold: number,
   changePercent: number,
   timestamp: string,
-  months: string[],
+  labels: string[],
   index: number,
-  dataPoints: number[]
+  dataPoints: number[],
+  isTimeSeries: boolean = true
 ): Alert {
   const level = determineLevel(changePercent, type);
+  
+  let description = '';
+  if (type === 'abnormal_fluctuation') {
+    if (isTimeSeries && index > 0) {
+      description = `${labels[index]}较${labels[index - 1]}${changePercent >= 0 ? '增长' : '下降'}${Math.abs(changePercent * 100).toFixed(1)}%，超出正常波动范围`;
+    } else {
+      description = `${metricName}${changePercent >= 0 ? '增长' : '下降'}${Math.abs(changePercent * 100).toFixed(1)}%，超出正常波动范围`;
+    }
+  } else if (type === 'continuous_decline') {
+    description = `${metricName}已连续下滑，累计下降${Math.abs(changePercent * 100).toFixed(1)}%，请关注`;
+  } else if (type === 'surge') {
+    if (isTimeSeries && index > 0) {
+      description = `${labels[index]}较${labels[index - 1]}激增${(changePercent * 100).toFixed(1)}%，请关注业务变化`;
+    } else {
+      description = `${labels[index]}较平均值激增${(changePercent * 100).toFixed(1)}%，请关注业务变化`;
+    }
+  }
+  
   const typeConfig: Record<AlertType, { title: string; description: string }> = {
     abnormal_fluctuation: {
       title: `${metricName}异常波动`,
-      description: `${months[index]}较${months[index - 1]}${changePercent >= 0 ? '增长' : '下降'}${Math.abs(changePercent * 100).toFixed(1)}%，超出正常波动范围`
+      description
     },
     continuous_decline: {
       title: `${metricName}连续下滑`,
-      description: `${metricName}已连续下滑，累计下降${Math.abs(changePercent * 100).toFixed(1)}%，请关注`
+      description
     },
     surge: {
       title: `${metricName}访问激增`,
-      description: `${months[index]}较${months[index - 1]}激增${(changePercent * 100).toFixed(1)}%，请关注业务变化`
+      description
     }
   };
   
@@ -268,10 +314,68 @@ function createAlert(
     timestamp,
     isRead: false,
     dataPoints: dataPoints.map((v, i) => ({
-      timestamp: months[i] || `第${i + 1}期`,
+      timestamp: labels[i] || `第${i + 1}期`,
       value: v
     }))
   };
+}
+
+function detectCategorySurge(sales: number[], _categories: string[], growth: number[]): { isAlert: boolean; changePercent: number; index: number; dataPoints: number[] } {
+  const avg = sales.reduce((a, b) => a + b, 0) / sales.length;
+  
+  for (let i = 0; i < sales.length; i++) {
+    if (sales[i] > avg * 1.5) {
+      const dataPoints = sales.map((s, idx) => {
+        if (idx === i) return s;
+        return Math.floor(avg * (0.8 + Math.random() * 0.4));
+      });
+      return {
+        isAlert: true,
+        changePercent: (sales[i] - avg) / avg,
+        index: i,
+        dataPoints
+      };
+    }
+  }
+  
+  for (let i = 0; i < growth.length; i++) {
+    if (growth[i] > 0.4) {
+      const dataPoints = sales.map((s, idx) => {
+        if (idx === i) return s;
+        return Math.floor(s * (0.7 + Math.random() * 0.3));
+      });
+      return {
+        isAlert: true,
+        changePercent: growth[i],
+        index: i,
+        dataPoints
+      };
+    }
+  }
+  
+  return { isAlert: false, changePercent: 0, index: -1, dataPoints: sales };
+}
+
+function detectChannelSurge(channels: { name: string; value: number }[]): { isAlert: boolean; changePercent: number; index: number; dataPoints: number[] } {
+  const values = channels.map(c => c.value);
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] > avg * 1.6) {
+      const dataPoints = values.map((v, idx) => {
+        if (idx === i) return v;
+        return Math.floor(avg * (0.7 + Math.random() * 0.5));
+      });
+      return {
+        isAlert: true,
+        changePercent: (values[i] - avg) / avg,
+        index: i,
+        dataPoints
+      };
+    }
+  }
+  
+  return { isAlert: false, changePercent: 0, index: -1, dataPoints: values };
 }
 
 export function generateAlerts(regionData: RegionData): Alert[] {
@@ -279,14 +383,14 @@ export function generateAlerts(regionData: RegionData): Alert[] {
   const now = new Date().toISOString();
   const { salesTrend, categorySales, marketShare } = regionData;
   
-  const fluctuationResult = detectAbnormalFluctuation(salesTrend.sales, 0.25);
+  const fluctuationResult = detectAbnormalFluctuation(salesTrend.sales, 0.2);
   if (fluctuationResult.isAlert) {
     alerts.push(createAlert(
       'abnormal_fluctuation',
       'chart-1',
       '销售额',
       salesTrend.sales[fluctuationResult.index],
-      0.25,
+      0.2,
       fluctuationResult.changePercent,
       now,
       salesTrend.months,
@@ -295,14 +399,14 @@ export function generateAlerts(regionData: RegionData): Alert[] {
     ));
   }
   
-  const orderFluctuation = detectAbnormalFluctuation(salesTrend.orders, 0.25);
+  const orderFluctuation = detectAbnormalFluctuation(salesTrend.orders, 0.2);
   if (orderFluctuation.isAlert) {
     alerts.push(createAlert(
       'abnormal_fluctuation',
       'chart-1',
       '订单量',
       salesTrend.orders[orderFluctuation.index],
-      0.25,
+      0.2,
       orderFluctuation.changePercent,
       now,
       salesTrend.months,
@@ -343,37 +447,38 @@ export function generateAlerts(regionData: RegionData): Alert[] {
     ));
   }
   
-  const categorySurge = detectSurge(categorySales.sales, 0.4);
-  if (categorySurge.isAlert) {
+  const categorySurgeResult = detectCategorySurge(categorySales.sales, categorySales.categories, categorySales.growth);
+  if (categorySurgeResult.isAlert) {
     alerts.push(createAlert(
       'surge',
       'chart-2',
-      `${categorySales.categories[categorySurge.index]}销售额`,
-      categorySales.sales[categorySurge.index],
+      `${categorySales.categories[categorySurgeResult.index]}销售额`,
+      categorySales.sales[categorySurgeResult.index],
       0.4,
-      categorySurge.changePercent,
+      categorySurgeResult.changePercent,
       now,
       categorySales.categories,
-      categorySurge.index,
-      categorySales.sales
+      categorySurgeResult.index,
+      categorySurgeResult.dataPoints,
+      false
     ));
   }
   
-  const channelValues = marketShare.channels.map(c => c.value);
-  const channelNames = marketShare.channels.map(c => c.name);
-  const channelSurge = detectSurge(channelValues, 0.4);
-  if (channelSurge.isAlert) {
+  const channelSurgeResult = detectChannelSurge(marketShare.channels);
+  if (channelSurgeResult.isAlert) {
+    const channelNames = marketShare.channels.map(c => c.name);
     alerts.push(createAlert(
       'surge',
       'chart-3',
-      `${channelNames[channelSurge.index]}访问量`,
-      channelValues[channelSurge.index],
+      `${channelNames[channelSurgeResult.index]}访问量`,
+      marketShare.channels[channelSurgeResult.index].value,
       0.4,
-      channelSurge.changePercent,
+      channelSurgeResult.changePercent,
       now,
       channelNames,
-      channelSurge.index,
-      channelValues
+      channelSurgeResult.index,
+      channelSurgeResult.dataPoints,
+      false
     ));
   }
   

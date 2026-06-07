@@ -94,9 +94,27 @@ function getChartAlertCount(chartId: string): number {
 }
 
 function handleLocateToChart(chartId: string) {
-  const chartElement = document.getElementById(`chart-${chartId}`);
+  const elementId = `chart-${chartId}`;
+  const chartElement = document.getElementById(elementId);
+  
   if (chartElement) {
     chartElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    chartElement.classList.add('locate-highlight');
+    setTimeout(() => {
+      chartElement.classList.remove('locate-highlight');
+    }, 3000);
+  } else {
+    setTimeout(() => {
+      const retryElement = document.getElementById(elementId);
+      if (retryElement) {
+        retryElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        retryElement.classList.add('locate-highlight');
+        setTimeout(() => {
+          retryElement.classList.remove('locate-highlight');
+        }, 3000);
+      }
+    }, 100);
   }
 }
 
@@ -135,5 +153,21 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   width: 100%;
+}
+
+:deep(.locate-highlight) {
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.4) !important;
+  transform: scale(1.02);
+  z-index: 100;
+  animation: locate-pulse 1s ease-in-out infinite;
+}
+
+@keyframes locate-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.4);
+  }
+  50% { 
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 0 50px rgba(59, 130, 246, 0.6);
+  }
 }
 </style>

@@ -180,6 +180,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       if (filter.field === 'region') {
         regionUpdateFlag.value++;
         updateChartsForRegion(value);
+        refreshAlerts(true);
       }
     }
   }
@@ -212,25 +213,43 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
   }
   
-  function refreshAlerts() {
+  function refreshAlerts(forceRefresh: boolean = false) {
     const detectedAlerts = generateAlerts(currentRegionData.value);
     const mockAlerts = generateMockAlerts();
     
-    const existingIds = new Set(alerts.value.map(a => a.id));
-    const newDetected = detectedAlerts.filter(a => !existingIds.has(a.id));
-    const newMock = mockAlerts.filter(a => !existingIds.has(a.id) && !alerts.value.some(existing => 
-      existing.type === a.type && existing.metricName === a.metricName
-    ));
-    
-    const allAlerts = [...alerts.value, ...newDetected, ...newMock];
-    
-    alerts.value = allAlerts.sort((a, b) => {
-      const levelOrder: Record<AlertLevel, number> = { high: 0, medium: 1, low: 2 };
-      if (levelOrder[a.level] !== levelOrder[b.level]) {
-        return levelOrder[a.level] - levelOrder[b.level];
-      }
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-    });
+    if (alerts.value.length === 0 || forceRefresh) {
+      const mockAlertKeys = new Set(mockAlerts.map(a => `${a.type}-${a.metricName}`));
+      const existingMockAlerts = alerts.value.filter(a => mockAlertKeys.has(`${a.type}-${a.metricName}`));
+      
+      const newMockAlerts = mockAlerts.filter(mock => 
+        !existingMockAlerts.some(existing => 
+          existing.type === mock.type && existing.metricName === mock.metricName
+        )
+      );
+      
+      const allMockAlerts = [...existingMockAlerts, ...newMockAlerts];
+      const allAlerts = [...detectedAlerts, ...allMockAlerts];
+      
+      alerts.value = allAlerts.sort((a, b) => {
+        const levelOrder: Record<AlertLevel, number> = { high: 0, medium: 1, low: 2 };
+        if (levelOrder[a.level] !== levelOrder[b.level]) {
+          return levelOrder[a.level] - levelOrder[b.level];
+        }
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+    } else {
+      const detectedKeys = new Set(detectedAlerts.map(a => `${a.type}-${a.metricName}`));
+      const filteredExisting = alerts.value.filter(a => !detectedKeys.has(`${a.type}-${a.metricName}`));
+      
+      const allAlerts = [...detectedAlerts, ...filteredExisting];
+      alerts.value = allAlerts.sort((a, b) => {
+        const levelOrder: Record<AlertLevel, number> = { high: 0, medium: 1, low: 2 };
+        if (levelOrder[a.level] !== levelOrder[b.level]) {
+          return levelOrder[a.level] - levelOrder[b.level];
+        }
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+    }
     
     lastAlertUpdate.value = new Date().toISOString();
   }

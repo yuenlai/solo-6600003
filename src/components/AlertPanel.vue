@@ -27,7 +27,7 @@
             <span>高风险提示</span>
           </button>
           <button 
-            @click="store.refreshAlerts()"
+            @click="store.refreshAlerts(true)"
             class="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
           >
             <span>🔄</span>
