@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName } from '../types';
 import { generateRegionData, generateAlerts, generateMockAlerts, generateScatterData, generateHeatmapData } from '../mock/data';
 
@@ -77,6 +77,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
     regionA: '华东',
     regionB: '华南'
   });
+
+  const compareModeLoading = ref(false);
   
   const alerts = ref<Alert[]>([]);
   const highlightedChartId = ref<string | null>(null);
@@ -103,6 +105,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   });
 
   const regionDataA = computed(() => {
+    regionUpdateFlag.value;
     const region = compareMode.value.regionA;
     if (!regionDataCache.value[region]) {
       regionDataCache.value[region] = generateRegionData(region);
@@ -111,6 +114,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   });
 
   const regionDataB = computed(() => {
+    regionUpdateFlag.value;
     const region = compareMode.value.regionB;
     if (!regionDataCache.value[region]) {
       regionDataCache.value[region] = generateRegionData(region);
@@ -773,11 +777,35 @@ export const useDashboardStore = defineStore('dashboard', () => {
     alertAutoRefresh.value = !alertAutoRefresh.value;
   }
 
-  function toggleCompareMode() {
-    compareMode.value.enabled = !compareMode.value.enabled;
+  function ensureCompareDataLoaded() {
+    const regionA = compareMode.value.regionA;
+    const regionB = compareMode.value.regionB;
+    
+    if (!regionDataCache.value[regionA]) {
+      regionDataCache.value[regionA] = generateRegionData(regionA);
+    }
+    if (!regionDataCache.value[regionB]) {
+      regionDataCache.value[regionB] = generateRegionData(regionB);
+    }
   }
 
-  function setCompareRegion(side: 'A' | 'B', region: string) {
+  async function toggleCompareMode() {
+    const newEnabled = !compareMode.value.enabled;
+    compareMode.value.enabled = newEnabled;
+    
+    if (newEnabled) {
+      compareModeLoading.value = true;
+      try {
+        ensureCompareDataLoaded();
+        regionUpdateFlag.value++;
+        await nextTick();
+      } finally {
+        compareModeLoading.value = false;
+      }
+    }
+  }
+
+  async function setCompareRegion(side: 'A' | 'B', region: string) {
     if (side === 'A') {
       if (region === compareMode.value.regionB) {
         compareMode.value.regionB = compareMode.value.regionA;
@@ -789,15 +817,29 @@ export const useDashboardStore = defineStore('dashboard', () => {
       }
       compareMode.value.regionB = region;
     }
-    regionUpdateFlag.value++;
+    
+    compareModeLoading.value = true;
+    try {
+      ensureCompareDataLoaded();
+      regionUpdateFlag.value++;
+      await nextTick();
+    } finally {
+      compareModeLoading.value = false;
+    }
   }
 
-  function refreshComparisonData() {
-    const regionA = compareMode.value.regionA;
-    const regionB = compareMode.value.regionB;
-    regionDataCache.value[regionA] = generateRegionData(regionA);
-    regionDataCache.value[regionB] = generateRegionData(regionB);
-    regionUpdateFlag.value++;
+  async function refreshComparisonData() {
+    compareModeLoading.value = true;
+    try {
+      const regionA = compareMode.value.regionA;
+      const regionB = compareMode.value.regionB;
+      regionDataCache.value[regionA] = generateRegionData(regionA);
+      regionDataCache.value[regionB] = generateRegionData(regionB);
+      regionUpdateFlag.value++;
+      await nextTick();
+    } finally {
+      compareModeLoading.value = false;
+    }
   }
 
   updateChartsForRegion('all');
@@ -809,12 +851,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
     alerts, unreadAlerts, highRiskAlerts, unreadHighRiskCount,
     alertsByLevel, alertsByType,
     highlightedChartId, alertAutoRefresh, lastAlertUpdate,
-    compareMode, comparisonData, regionDataA, regionDataB,
+    compareMode, compareModeLoading, comparisonData, regionDataA, regionDataB,
     toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData,
     refreshRegionData, updateChartsForRegion,
     refreshAlerts, markAlertAsRead, markAllAlertsAsRead,
     dismissAlert, clearAllAlerts, setHighlightedChart, toggleAlertAutoRefresh,
     addCustomChart, refreshCustomChart, generateChartOption,
-    toggleCompareMode, setCompareRegion, refreshComparisonData
+    toggleCompareMode, setCompareRegion, refreshComparisonData, ensureCompareDataLoaded
   };
 });

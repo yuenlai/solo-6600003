@@ -8,7 +8,7 @@
             @click="handleSwitchMode(false)"
             :class="[
               'px-4 py-2 text-sm font-medium transition-all duration-200',
-              !store.compareMode.enabled
+              !compareMode.enabled
                 ? 'bg-primary-500 text-white'
                 : 'bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
             ]"
@@ -22,7 +22,7 @@
             @click="handleSwitchMode(true)"
             :class="[
               'px-4 py-2 text-sm font-medium transition-all duration-200',
-              store.compareMode.enabled
+              compareMode.enabled
                 ? 'bg-primary-500 text-white'
                 : 'bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
             ]"
@@ -37,16 +37,23 @@
 
       <Transition name="fade">
         <button
-          v-if="store.compareMode.enabled"
+          v-if="compareMode.enabled"
           @click="handleRefreshCompare"
-          class="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 text-gray-700 dark:text-gray-300"
+          :disabled="compareModeLoading"
+          :class="[
+            'px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2',
+            compareModeLoading
+              ? 'bg-gray-200 dark:bg-gray-600 text-gray-400 cursor-not-allowed'
+              : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
+          ]"
         >
-          <span>🔄</span> 刷新对比数据
+          <span :class="{ 'animate-spin': compareModeLoading }">🔄</span> 
+          {{ compareModeLoading ? '加载中...' : '刷新对比数据' }}
         </button>
       </Transition>
     </div>
 
-    <div v-if="!store.compareMode.enabled && regionFilter" class="region-selector">
+    <div v-if="!compareMode.enabled && regionFilter" class="region-selector">
       <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">经营视角：</label>
       <div class="flex flex-wrap gap-2">
         <button
@@ -72,7 +79,7 @@
       </div>
     </div>
 
-    <div v-if="store.compareMode.enabled" class="compare-region-selector space-y-3">
+    <div v-if="compareMode.enabled" class="compare-region-selector space-y-3">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-200 dark:border-blue-800">
           <div class="flex items-center gap-2 mb-3">
@@ -87,7 +94,7 @@
               @click="handleCompareRegionChange('A', opt)"
               :class="[
                 'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
-                store.compareMode.regionA === opt
+                compareMode.regionA === opt
                   ? 'bg-blue-500 text-white shadow-md'
                   : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-gray-200 dark:border-gray-600'
               ]"
@@ -113,7 +120,7 @@
               @click="handleCompareRegionChange('B', opt)"
               :class="[
                 'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
-                store.compareMode.regionB === opt
+                compareMode.regionB === opt
                   ? 'bg-green-500 text-white shadow-md'
                   : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-green-100 dark:hover:bg-green-900/50 border border-gray-200 dark:border-gray-600'
               ]"
@@ -127,16 +134,16 @@
         </div>
       </div>
 
-      <div v-if="store.comparisonData" class="flex items-center justify-center gap-4 py-2 text-sm">
+      <div v-if="comparisonData" class="flex items-center justify-center gap-4 py-2 text-sm">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-blue-500"></span>
-          <span class="text-gray-600 dark:text-gray-400">{{ store.comparisonData.summary.regionA }}</span>
-          <span class="font-bold text-blue-600 dark:text-blue-400">{{ store.comparisonData.summary.totalWinsA }} 胜</span>
+          <span class="text-gray-600 dark:text-gray-400">{{ comparisonData.summary.regionA }}</span>
+          <span class="font-bold text-blue-600 dark:text-blue-400">{{ comparisonData.summary.totalWinsA }} 胜</span>
         </div>
         <span class="text-2xl font-bold text-gray-300 dark:text-gray-600">VS</span>
         <div class="flex items-center gap-2">
-          <span class="font-bold text-green-600 dark:text-green-400">{{ store.comparisonData.summary.totalWinsB }} 胜</span>
-          <span class="text-gray-600 dark:text-gray-400">{{ store.comparisonData.summary.regionB }}</span>
+          <span class="font-bold text-green-600 dark:text-green-400">{{ comparisonData.summary.totalWinsB }} 胜</span>
+          <span class="text-gray-600 dark:text-gray-400">{{ comparisonData.summary.regionB }}</span>
           <span class="w-3 h-3 rounded-full bg-green-500"></span>
         </div>
       </div>
@@ -163,7 +170,7 @@ import { useDashboardStore } from '../stores/dashboard';
 import { storeToRefs } from 'pinia';
 
 const store = useDashboardStore();
-const { dashboard, comparisonData } = storeToRefs(store);
+const { dashboard, comparisonData, compareMode, compareModeLoading } = storeToRefs(store);
 
 const regionFilter = computed(() => 
   dashboard.value.filters.find(f => f.field === 'region')
@@ -189,7 +196,7 @@ function handleRegionChange(value: string) {
 }
 
 function handleSwitchMode(enableCompare: boolean) {
-  if (enableCompare !== store.compareMode.enabled) {
+  if (enableCompare !== compareMode.value.enabled) {
     store.toggleCompareMode();
   }
 }

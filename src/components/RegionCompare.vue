@@ -1,5 +1,5 @@
 <template>
-  <div v-if="comparisonData" class="region-compare space-y-6">
+  <div v-if="comparisonData && comparisonData.summary && comparisonData.summary.metrics" class="region-compare space-y-6">
     <div class="compare-header bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 rounded-xl p-6 text-white shadow-lg">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-6">
@@ -201,7 +201,7 @@
       <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
         <span>🏷️</span> 分类差异
       </h3>
-      <div class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md overflow-x-auto">
+      <div v-if="comparisonData.categoryDifference?.items?.length > 0" class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md overflow-x-auto">
         <table class="w-full">
           <thead>
             <tr class="border-b-2 border-gray-200 dark:border-gray-700">
@@ -337,7 +337,27 @@ const updateTime = computed(() => {
   });
 });
 
+function getEmptyChartOption(message: string) {
+  return {
+    title: {
+      text: message,
+      left: 'center',
+      top: 'center',
+      textStyle: {
+        color: '#9ca3af',
+        fontSize: 14
+      }
+    },
+    xAxis: { show: false },
+    yAxis: { show: false },
+    series: []
+  };
+}
+
 const salesTrendOption = computed(() => {
+  if (!props.comparisonData?.trendDifference || !props.comparisonData?.summary) {
+    return getEmptyChartOption('暂无数据');
+  }
   const { months, salesA, salesB } = props.comparisonData.trendDifference;
   const regionA = props.comparisonData.summary.regionA;
   const regionB = props.comparisonData.summary.regionB;
@@ -430,6 +450,9 @@ const salesTrendOption = computed(() => {
 });
 
 const ordersTrendOption = computed(() => {
+  if (!props.comparisonData?.trendDifference || !props.comparisonData?.summary) {
+    return getEmptyChartOption('暂无数据');
+  }
   const { months, ordersA, ordersB } = props.comparisonData.trendDifference;
   const regionA = props.comparisonData.summary.regionA;
   const regionB = props.comparisonData.summary.regionB;
@@ -522,6 +545,9 @@ const ordersTrendOption = computed(() => {
 });
 
 const categoryCompareOption = computed(() => {
+  if (!props.comparisonData?.categoryDifference?.items || !props.comparisonData?.summary) {
+    return getEmptyChartOption('暂无数据');
+  }
   const { items } = props.comparisonData.categoryDifference;
   const regionA = props.comparisonData.summary.regionA;
   const regionB = props.comparisonData.summary.regionB;
@@ -593,6 +619,9 @@ const categoryCompareOption = computed(() => {
 });
 
 const categoryGrowthOption = computed(() => {
+  if (!props.comparisonData?.categoryDifference?.items || !props.comparisonData?.summary) {
+    return getEmptyChartOption('暂无数据');
+  }
   const { items } = props.comparisonData.categoryDifference;
   const regionA = props.comparisonData.summary.regionA;
   const regionB = props.comparisonData.summary.regionB;
