@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension } from '../types';
+import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName } from '../types';
 import { generateRegionData, generateAlerts, generateMockAlerts, generateScatterData, generateHeatmapData } from '../mock/data';
 
 export const useDashboardStore = defineStore('dashboard', () => {
@@ -71,6 +71,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   const regionDataCache = ref<Record<string, RegionData>>({});
   const regionUpdateFlag = ref(0);
+
+  const compareMode = ref<CompareModeState>({
+    enabled: false,
+    regionA: '华东',
+    regionB: '华南'
+  });
   
   const alerts = ref<Alert[]>([]);
   const highlightedChartId = ref<string | null>(null);
@@ -94,6 +100,129 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const regionOverview = computed(() => {
     regionUpdateFlag.value;
     return currentRegionData.value.overview;
+  });
+
+  const regionDataA = computed(() => {
+    const region = compareMode.value.regionA;
+    if (!regionDataCache.value[region]) {
+      regionDataCache.value[region] = generateRegionData(region);
+    }
+    return regionDataCache.value[region];
+  });
+
+  const regionDataB = computed(() => {
+    const region = compareMode.value.regionB;
+    if (!regionDataCache.value[region]) {
+      regionDataCache.value[region] = generateRegionData(region);
+    }
+    return regionDataCache.value[region];
+  });
+
+  const METRIC_CONFIGS: { metric: MetricName; label: string; icon: string }[] = [
+    { metric: 'totalSales', label: '总销售额', icon: '💰' },
+    { metric: 'orderCount', label: '订单量', icon: '📦' },
+    { metric: 'avgOrderValue', label: '客单价', icon: '💎' },
+    { metric: 'customerCount', label: '客户数', icon: '👥' }
+  ];
+
+  const GROWTH_MAP: Record<MetricName, keyof RegionData['overview']> = {
+    totalSales: 'salesGrowth',
+    orderCount: 'orderGrowth',
+    avgOrderValue: 'avgOrderGrowth',
+    customerCount: 'customerGrowth'
+  };
+
+  function createMetricComparison(
+    metric: MetricName,
+    label: string,
+    icon: string,
+    dataA: RegionData,
+    dataB: RegionData
+  ): MetricComparison {
+    const valueA = dataA.overview[metric] as number;
+    const valueB = dataB.overview[metric] as number;
+    const growthA = dataA.overview[GROWTH_MAP[metric]] as number;
+    const growthB = dataB.overview[GROWTH_MAP[metric]] as number;
+    const diff = valueA - valueB;
+    const diffPercent = valueB !== 0 ? diff / valueB : 0;
+    const leader = (valueA > valueB ? 'A' : valueA < valueB ? 'B' : 'tie') as 'A' | 'B' | 'tie';
+
+    return {
+      metric,
+      label,
+      icon,
+      valueA,
+      valueB,
+      growthA,
+      growthB,
+      diff,
+      diffPercent,
+      leader
+    };
+  }
+
+  const comparisonData = computed<RegionComparisonData | null>(() => {
+    if (!compareMode.value.enabled) return null;
+
+    const dataA = regionDataA.value;
+    const dataB = regionDataB.value;
+
+    const metrics = METRIC_CONFIGS.map(config =>
+      createMetricComparison(config.metric, config.label, config.icon, dataA, dataB)
+    );
+
+    const totalWinsA = metrics.filter(m => m.leader === 'A').length;
+    const totalWinsB = metrics.filter(m => m.leader === 'B').length;
+    const overallLeader = totalWinsA > totalWinsB ? 'A' : totalWinsA < totalWinsB ? 'B' : 'tie';
+
+    const salesDiff = dataA.salesTrend.sales.map((s, i) => s - dataB.salesTrend.sales[i]);
+    const ordersDiff = dataA.salesTrend.orders.map((o, i) => o - dataB.salesTrend.orders[i]);
+
+    const categoryItems = dataA.categorySales.categories.map((cat, i) => {
+      const salesA = dataA.categorySales.sales[i];
+      const salesB = dataB.categorySales.sales[i];
+      const growthA = dataA.categorySales.growth[i];
+      const growthB = dataB.categorySales.growth[i];
+      const diff = salesA - salesB;
+      const diffPercent = salesB !== 0 ? diff / salesB : 0;
+      const leader = (salesA > salesB ? 'A' : salesA < salesB ? 'B' : 'tie') as 'A' | 'B' | 'tie';
+
+      return {
+        category: cat,
+        salesA,
+        salesB,
+        growthA,
+        growthB,
+        diff,
+        diffPercent,
+        leader
+      };
+    });
+
+    return {
+      summary: {
+        regionA: dataA.overview.region,
+        regionB: dataB.overview.region,
+        metrics,
+        totalWinsA,
+        totalWinsB,
+        overallLeader
+      },
+      trendDifference: {
+        months: dataA.salesTrend.months,
+        salesA: dataA.salesTrend.sales,
+        salesB: dataB.salesTrend.sales,
+        ordersA: dataA.salesTrend.orders,
+        ordersB: dataB.salesTrend.orders,
+        salesDiff,
+        ordersDiff
+      },
+      categoryDifference: {
+        items: categoryItems
+      },
+      dataA,
+      dataB
+    };
   });
 
   const isDark = computed(() => dashboard.value.theme === 'dark');
@@ -644,6 +773,33 @@ export const useDashboardStore = defineStore('dashboard', () => {
     alertAutoRefresh.value = !alertAutoRefresh.value;
   }
 
+  function toggleCompareMode() {
+    compareMode.value.enabled = !compareMode.value.enabled;
+  }
+
+  function setCompareRegion(side: 'A' | 'B', region: string) {
+    if (side === 'A') {
+      if (region === compareMode.value.regionB) {
+        compareMode.value.regionB = compareMode.value.regionA;
+      }
+      compareMode.value.regionA = region;
+    } else {
+      if (region === compareMode.value.regionA) {
+        compareMode.value.regionA = compareMode.value.regionB;
+      }
+      compareMode.value.regionB = region;
+    }
+    regionUpdateFlag.value++;
+  }
+
+  function refreshComparisonData() {
+    const regionA = compareMode.value.regionA;
+    const regionB = compareMode.value.regionB;
+    regionDataCache.value[regionA] = generateRegionData(regionA);
+    regionDataCache.value[regionB] = generateRegionData(regionB);
+    regionUpdateFlag.value++;
+  }
+
   updateChartsForRegion('all');
   refreshAlerts();
 
@@ -653,10 +809,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
     alerts, unreadAlerts, highRiskAlerts, unreadHighRiskCount,
     alertsByLevel, alertsByType,
     highlightedChartId, alertAutoRefresh, lastAlertUpdate,
+    compareMode, comparisonData, regionDataA, regionDataB,
     toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData,
     refreshRegionData, updateChartsForRegion,
     refreshAlerts, markAlertAsRead, markAllAlertsAsRead,
     dismissAlert, clearAllAlerts, setHighlightedChart, toggleAlertAutoRefresh,
-    addCustomChart, refreshCustomChart, generateChartOption
+    addCustomChart, refreshCustomChart, generateChartOption,
+    toggleCompareMode, setCompareRegion, refreshComparisonData
   };
 });

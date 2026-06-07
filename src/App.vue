@@ -2,89 +2,101 @@
   <div :class="{ 'dark': isDark }" class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
     <DashboardHeader @chart-created="handleNewChartCreated" />
     <main class="p-6 space-y-4 max-w-7xl mx-auto">
-      <RegionOverview 
-        :overview="regionOverview" 
-        @refresh="handleRefreshOverview" 
-      />
-      
-      <AlertPanel @locate="handleLocateToChart" />
-      
       <FilterBar />
-      
-      <div class="charts-container" ref="chartsContainer">
-        <div class="chart-row">
-          <div class="chart-item">
-            <ChartCard
-              v-if="salesTrendChart"
-              :chart-id="salesTrendChart.id"
-              :title="salesTrendChart.title"
-              :chart-option="salesTrendChart.option"
-              :is-dark="isDark"
-              :is-highlighted="highlightedChartId === salesTrendChart.id"
-              :alert-count="getChartAlertCount(salesTrendChart.id)"
-              @refresh="refreshChart(salesTrendChart.id)"
-              @remove="store.removeChart(salesTrendChart.id)"
-            />
-          </div>
-          <div class="chart-item">
-            <ChartCard
-              v-if="categoryChart"
-              :chart-id="categoryChart.id"
-              :title="categoryChart.title"
-              :chart-option="categoryChart.option"
-              :is-dark="isDark"
-              :is-highlighted="highlightedChartId === categoryChart.id"
-              :alert-count="getChartAlertCount(categoryChart.id)"
-              @refresh="refreshChart(categoryChart.id)"
-              @remove="store.removeChart(categoryChart.id)"
-            />
-          </div>
-        </div>
-        <div class="chart-row">
-          <div class="chart-item-full">
-            <ChartCard
-              v-if="marketShareChart"
-              :chart-id="marketShareChart.id"
-              :title="marketShareChart.title"
-              :chart-option="marketShareChart.option"
-              :is-dark="isDark"
-              :is-highlighted="highlightedChartId === marketShareChart.id"
-              :alert-count="getChartAlertCount(marketShareChart.id)"
-              @refresh="refreshChart(marketShareChart.id)"
-              @remove="store.removeChart(marketShareChart.id)"
-            />
-          </div>
-        </div>
 
-        <TransitionGroup name="chart-list" tag="div" class="space-y-4">
-          <template v-for="(row, _index) in customChartRows" :key="row.map(c => c.id).join('-')">
+      <Transition name="fade" mode="out-in">
+        <RegionCompare
+          v-if="store.compareMode.enabled && store.comparisonData"
+          :key="'compare-view'"
+          :comparison-data="store.comparisonData"
+          :is-dark="isDark"
+          @refresh="handleRefreshComparison"
+        />
+
+        <div v-else :key="'normal-view'" class="space-y-4">
+          <RegionOverview 
+            :overview="regionOverview" 
+            @refresh="handleRefreshOverview" 
+          />
+          
+          <AlertPanel @locate="handleLocateToChart" />
+          
+          <div class="charts-container" ref="chartsContainer">
             <div class="chart-row">
-              <div 
-                v-for="chart in row" 
-                :key="chart.id"
-                :class="[
-                  row.length === 1 ? 'chart-item-full' : 'chart-item',
-                  { 'chart-leaving': deletingChartIds.has(chart.id) }
-                ]"
-              >
+              <div class="chart-item">
                 <ChartCard
-                  :chart-id="chart.id"
-                  :title="chart.title"
-                  :chart-option="chart.option"
+                  v-if="salesTrendChart"
+                  :chart-id="salesTrendChart.id"
+                  :title="salesTrendChart.title"
+                  :chart-option="salesTrendChart.option"
                   :is-dark="isDark"
-                  :is-custom="chart.isCustom"
-                  :is-new="newChartIds.has(chart.id)"
-                  :is-highlighted="highlightedChartId === chart.id"
-                  :alert-count="getChartAlertCount(chart.id)"
-                  @refresh="refreshChart(chart.id)"
-                  @remove="handleRemoveChart(chart.id)"
-                  @animation-end="handleAnimationEnd(chart.id)"
+                  :is-highlighted="highlightedChartId === salesTrendChart.id"
+                  :alert-count="getChartAlertCount(salesTrendChart.id)"
+                  @refresh="refreshChart(salesTrendChart.id)"
+                  @remove="store.removeChart(salesTrendChart.id)"
+                />
+              </div>
+              <div class="chart-item">
+                <ChartCard
+                  v-if="categoryChart"
+                  :chart-id="categoryChart.id"
+                  :title="categoryChart.title"
+                  :chart-option="categoryChart.option"
+                  :is-dark="isDark"
+                  :is-highlighted="highlightedChartId === categoryChart.id"
+                  :alert-count="getChartAlertCount(categoryChart.id)"
+                  @refresh="refreshChart(categoryChart.id)"
+                  @remove="store.removeChart(categoryChart.id)"
                 />
               </div>
             </div>
-          </template>
-        </TransitionGroup>
-      </div>
+            <div class="chart-row">
+              <div class="chart-item-full">
+                <ChartCard
+                  v-if="marketShareChart"
+                  :chart-id="marketShareChart.id"
+                  :title="marketShareChart.title"
+                  :chart-option="marketShareChart.option"
+                  :is-dark="isDark"
+                  :is-highlighted="highlightedChartId === marketShareChart.id"
+                  :alert-count="getChartAlertCount(marketShareChart.id)"
+                  @refresh="refreshChart(marketShareChart.id)"
+                  @remove="store.removeChart(marketShareChart.id)"
+                />
+              </div>
+            </div>
+
+            <TransitionGroup name="chart-list" tag="div" class="space-y-4">
+              <template v-for="(row, _index) in customChartRows" :key="row.map(c => c.id).join('-')">
+                <div class="chart-row">
+                  <div 
+                    v-for="chart in row" 
+                    :key="chart.id"
+                    :class="[
+                      row.length === 1 ? 'chart-item-full' : 'chart-item',
+                      { 'chart-leaving': deletingChartIds.has(chart.id) }
+                    ]"
+                  >
+                    <ChartCard
+                      :chart-id="chart.id"
+                      :title="chart.title"
+                      :chart-option="chart.option"
+                      :is-dark="isDark"
+                      :is-custom="chart.isCustom"
+                      :is-new="newChartIds.has(chart.id)"
+                      :is-highlighted="highlightedChartId === chart.id"
+                      :alert-count="getChartAlertCount(chart.id)"
+                      @refresh="refreshChart(chart.id)"
+                      @remove="handleRemoveChart(chart.id)"
+                      @animation-end="handleAnimationEnd(chart.id)"
+                    />
+                  </div>
+                </div>
+              </template>
+            </TransitionGroup>
+          </div>
+        </div>
+      </Transition>
     </main>
 
     <Teleport to="body">
@@ -102,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useDashboardStore } from './stores/dashboard';
 import { storeToRefs } from 'pinia';
 import DashboardHeader from './components/DashboardHeader.vue';
@@ -110,9 +122,18 @@ import FilterBar from './components/FilterBar.vue';
 import ChartCard from './components/ChartCard.vue';
 import RegionOverview from './components/RegionOverview.vue';
 import AlertPanel from './components/AlertPanel.vue';
+import RegionCompare from './components/RegionCompare.vue';
 
 const store = useDashboardStore();
-const { dashboard, isDark, regionOverview, alerts, highlightedChartId } = storeToRefs(store);
+const { dashboard, isDark, regionOverview, alerts, highlightedChartId, compareMode } = storeToRefs(store);
+
+watch(() => compareMode.value.enabled, (newVal) => {
+  if (newVal) {
+    showToast('⚖️ 已切换到地区对比模式', 'info');
+  } else {
+    showToast('📊 已切换到单地区模式', 'info');
+  }
+});
 
 const chartsContainer = ref<HTMLElement | null>(null);
 const newChartIds = ref<Set<string>>(new Set());
@@ -194,6 +215,11 @@ function handleRefreshOverview() {
   store.refreshRegionData();
 }
 
+function handleRefreshComparison() {
+  store.refreshComparisonData();
+  showToast('🔄 对比数据已刷新', 'info');
+}
+
 function handleRemoveChart(chartId: string) {
   deletingChartIds.value.add(chartId);
   showToast('🗑️ 图表已删除，从布局中移除', 'info');
@@ -253,6 +279,17 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
 .charts-container {
   display: flex;
   flex-direction: column;

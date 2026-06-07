@@ -98,3 +98,66 @@ export interface AlertDetectionConfig {
   continuousDeclinePeriods: number;
   surgeThreshold: number;
 }
+
+export type MetricName = 'totalSales' | 'orderCount' | 'avgOrderValue' | 'customerCount';
+
+export interface MetricComparison {
+  metric: MetricName;
+  label: string;
+  icon: string;
+  valueA: number;
+  valueB: number;
+  growthA: number;
+  growthB: number;
+  diff: number;
+  diffPercent: number;
+  leader: 'A' | 'B' | 'tie';
+}
+
+export interface ComparisonSummary {
+  regionA: string;
+  regionB: string;
+  metrics: MetricComparison[];
+  totalWinsA: number;
+  totalWinsB: number;
+  overallLeader: 'A' | 'B' | 'tie';
+}
+
+export interface TrendDifference {
+  months: string[];
+  salesA: number[];
+  salesB: number[];
+  ordersA: number[];
+  ordersB: number[];
+  salesDiff: number[];
+  ordersDiff: number[];
+}
+
+export interface CategoryDifferenceItem {
+  category: string;
+  salesA: number;
+  salesB: number;
+  growthA: number;
+  growthB: number;
+  diff: number;
+  diffPercent: number;
+  leader: 'A' | 'B' | 'tie';
+}
+
+export interface CategoryDifference {
+  items: CategoryDifferenceItem[];
+}
+
+export interface RegionComparisonData {
+  summary: ComparisonSummary;
+  trendDifference: TrendDifference;
+  categoryDifference: CategoryDifference;
+  dataA: RegionData;
+  dataB: RegionData;
+}
+
+export interface CompareModeState {
+  enabled: boolean;
+  regionA: string;
+  regionB: string;
+}
