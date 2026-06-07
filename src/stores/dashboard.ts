@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
-import { ref, computed, watch } from 'vue';
-import type { Dashboard, ChartConfig, FilterConfig, RegionData } from '../types';
+import { ref, computed } from 'vue';
+import type { Dashboard, ChartConfig, RegionData } from '../types';
 import { generateRegionData } from '../mock/data';
 
 export const useDashboardStore = defineStore('dashboard', () => {
@@ -19,7 +19,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
         gridArea: { x: 0, y: 0, w: 6, h: 4 },
         option: {
           xAxis: { type: 'category', data: ['1月', '2月', '3月', '4月', '5月', '6月'] },
-          yAxis: { type: 'value' },
           series: [
             { name: '销售额', data: [820, 932, 901, 934, 1290, 1330], type: 'line', smooth: true, yAxisIndex: 0 },
             { name: '订单量', data: [210, 240, 230, 245, 320, 340], type: 'line', smooth: true, yAxisIndex: 1 }
@@ -71,6 +70,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   });
 
   const regionDataCache = ref<Record<string, RegionData>>({});
+  const regionUpdateFlag = ref(0);
 
   const currentRegion = computed(() => {
     const regionFilter = dashboard.value.filters.find(f => f.field === 'region');
@@ -79,21 +79,22 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   const currentRegionData = computed(() => {
     const region = currentRegion.value;
+    regionUpdateFlag.value;
     if (!regionDataCache.value[region]) {
       regionDataCache.value[region] = generateRegionData(region);
     }
     return regionDataCache.value[region];
   });
 
-  const regionOverview = computed(() => currentRegionData.value.overview);
+  const regionOverview = computed(() => {
+    regionUpdateFlag.value;
+    return currentRegionData.value.overview;
+  });
 
   const isDark = computed(() => dashboard.value.theme === 'dark');
 
-  function formatNumber(num: number): string {
-    if (num >= 10000) {
-      return (num / 10000).toFixed(1);
-    }
-    return num.toString();
+  function toWan(num: number): number {
+    return Number((num / 10000).toFixed(1));
   }
 
   function updateChartsForRegion(region: string) {
@@ -104,26 +105,46 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
     const salesTrendChart = dashboard.value.charts.find(c => c.id === 'chart-1');
     if (salesTrendChart) {
-      salesTrendChart.option.xAxis.data = data.salesTrend.months;
-      salesTrendChart.option.series[0].data = data.salesTrend.sales.map(s => Number(formatNumber(s)));
-      salesTrendChart.option.series[1].data = data.salesTrend.orders.map(o => Number(formatNumber(o)));
+      const newOption = {
+        ...salesTrendChart.option,
+        xAxis: { ...salesTrendChart.option.xAxis, data: [...data.salesTrend.months] },
+        series: [
+          { ...salesTrendChart.option.series[0], data: data.salesTrend.sales.map(toWan) },
+          { ...salesTrendChart.option.series[1], data: data.salesTrend.orders.map(toWan) }
+        ]
+      };
+      salesTrendChart.option = newOption;
     }
 
     const categoryChart = dashboard.value.charts.find(c => c.id === 'chart-2');
     if (categoryChart) {
-      categoryChart.option.xAxis.data = data.categorySales.categories;
-      categoryChart.option.series[0].data = data.categorySales.sales.map((s, i) => ({
-        value: Number(formatNumber(s)),
-        growth: data.categorySales.growth[i]
-      }));
+      const newOption = {
+        ...categoryChart.option,
+        xAxis: { ...categoryChart.option.xAxis, data: [...data.categorySales.categories] },
+        series: [{
+          ...categoryChart.option.series[0],
+          data: data.categorySales.sales.map((s, i) => ({
+            value: toWan(s),
+            growth: data.categorySales.growth[i]
+          }))
+        }]
+      };
+      categoryChart.option = newOption;
     }
 
     const marketShareChart = dashboard.value.charts.find(c => c.id === 'chart-3');
     if (marketShareChart) {
-      marketShareChart.option.series[0].data = data.marketShare.channels.map(c => ({
-        name: c.name,
-        value: Number(formatNumber(c.value))
-      }));
+      const newOption = {
+        ...marketShareChart.option,
+        series: [{
+          ...marketShareChart.option.series[0],
+          data: data.marketShare.channels.map(c => ({
+            name: c.name,
+            value: toWan(c.value)
+          }))
+        }]
+      };
+      marketShareChart.option = newOption;
     }
   }
 
@@ -136,6 +157,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     if (filter) {
       filter.value = value;
       if (filter.field === 'region') {
+        regionUpdateFlag.value++;
         updateChartsForRegion(value);
       }
     }
@@ -162,6 +184,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   function refreshRegionData() {
     const region = currentRegion.value;
     regionDataCache.value[region] = generateRegionData(region);
+    regionUpdateFlag.value++;
     updateChartsForRegion(region);
   }
 

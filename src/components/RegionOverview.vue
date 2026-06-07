@@ -71,7 +71,7 @@
 import { computed } from 'vue';
 import type { RegionOverview } from '../types';
 
-const props = defineProps<{
+defineProps<{
   overview: RegionOverview;
 }>();
 

@@ -7,12 +7,13 @@
         <button @click="$emit('remove')" class="text-gray-400 hover:text-red-500 text-xs">删除</button>
       </div>
     </div>
-    <v-chart :option="chartOption" :theme="isDark ? 'dark' : ''" autoresize style="height: 280px; width: 100%" />
+    <div class="chart-container" style="height: 280px; width: 100%;">
+      <v-chart :option="chartOption" :theme="isDark ? 'dark' : ''" autoresize style="height: 100%; width: 100%;" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -27,7 +28,7 @@ use([
   TitleComponent, TooltipComponent, LegendComponent, GridComponent, VisualMapComponent
 ]);
 
-const props = defineProps<{
+defineProps<{
   title: string;
   chartOption: Record<string, any>;
   isDark: boolean;

@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
-import { useDashboardStore } from '../stores/dashboard';
+import { useDashboardStore } from './stores/dashboard';
 import { storeToRefs } from 'pinia';
 import DashboardHeader from './components/DashboardHeader.vue';
 import FilterBar from './components/FilterBar.vue';
@@ -39,7 +39,7 @@ const { dashboard, isDark, regionOverview } = storeToRefs(store);
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
-function refreshChart(chartId: string) {
+function refreshChart(_chartId: string) {
   store.refreshRegionData();
 }
 
