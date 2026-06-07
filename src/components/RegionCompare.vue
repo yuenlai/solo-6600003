@@ -139,12 +139,14 @@
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md">
           <h4 class="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4">销售额趋势对比</h4>
-          <div class="chart-container" style="height: 300px;">
+          <div class="chart-container" style="height: 300px; min-height: 300px;">
             <v-chart
+              :key="'sales-' + chartKey"
               :option="salesTrendOption"
               :theme="isDark ? 'dark' : ''"
               autoresize
-              style="height: 100%; width: 100%;"
+              manual-update
+              style="height: 100%; width: 100%; min-height: 300px;"
             />
           </div>
           <div class="mt-4 space-y-2">
@@ -168,12 +170,14 @@
 
         <div class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md">
           <h4 class="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4">订单量趋势对比</h4>
-          <div class="chart-container" style="height: 300px;">
+          <div class="chart-container" style="height: 300px; min-height: 300px;">
             <v-chart
+              :key="'orders-' + chartKey"
               :option="ordersTrendOption"
               :theme="isDark ? 'dark' : ''"
               autoresize
-              style="height: 100%; width: 100%;"
+              manual-update
+              style="height: 100%; width: 100%; min-height: 300px;"
             />
           </div>
           <div class="mt-4 space-y-2">
@@ -280,23 +284,27 @@
       <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md">
           <h4 class="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4">品类销售额对比</h4>
-          <div class="chart-container" style="height: 280px;">
+          <div class="chart-container" style="height: 280px; min-height: 280px;">
             <v-chart
+              :key="'category-sales-' + chartKey"
               :option="categoryCompareOption"
               :theme="isDark ? 'dark' : ''"
               autoresize
-              style="height: 100%; width: 100%;"
+              manual-update
+              style="height: 100%; width: 100%; min-height: 280px;"
             />
           </div>
         </div>
         <div class="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md">
           <h4 class="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4">品类增长率对比</h4>
-          <div class="chart-container" style="height: 280px;">
+          <div class="chart-container" style="height: 280px; min-height: 280px;">
             <v-chart
+              :key="'category-growth-' + chartKey"
               :option="categoryGrowthOption"
               :theme="isDark ? 'dark' : ''"
               autoresize
-              style="height: 100%; width: 100%;"
+              manual-update
+              style="height: 100%; width: 100%; min-height: 280px;"
             />
           </div>
         </div>
@@ -325,6 +333,11 @@ const props = defineProps<{
 }>();
 
 defineEmits(['refresh']);
+
+const chartKey = computed(() => {
+  const data = props.comparisonData;
+  return `${data.summary.regionA}-${data.summary.regionB}-${data.summary.totalWinsA}-${data.summary.totalWinsB}-${Date.now()}`;
+});
 
 const updateTime = computed(() => {
   const now = new Date();

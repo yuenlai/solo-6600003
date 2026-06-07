@@ -79,6 +79,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   });
 
   const compareModeLoading = ref(false);
+  const comparisonVersion = ref(0);
   
   const alerts = ref<Alert[]>([]);
   const highlightedChartId = ref<string | null>(null);
@@ -166,10 +167,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   const comparisonData = computed<RegionComparisonData | null>(() => {
+    comparisonVersion.value;
+    regionUpdateFlag.value;
     if (!compareMode.value.enabled) return null;
 
     const dataA = regionDataA.value;
     const dataB = regionDataB.value;
+    
+    if (!dataA || !dataB) return null;
 
     const metrics = METRIC_CONFIGS.map(config =>
       createMetricComparison(config.metric, config.label, config.icon, dataA, dataB)
@@ -792,12 +797,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
   async function toggleCompareMode() {
     const newEnabled = !compareMode.value.enabled;
     compareMode.value.enabled = newEnabled;
+    comparisonVersion.value++;
     
     if (newEnabled) {
       compareModeLoading.value = true;
       try {
         ensureCompareDataLoaded();
         regionUpdateFlag.value++;
+        comparisonVersion.value++;
         await nextTick();
       } finally {
         compareModeLoading.value = false;
@@ -819,9 +826,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
     
     compareModeLoading.value = true;
+    comparisonVersion.value++;
     try {
       ensureCompareDataLoaded();
       regionUpdateFlag.value++;
+      comparisonVersion.value++;
       await nextTick();
     } finally {
       compareModeLoading.value = false;
@@ -830,12 +839,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   async function refreshComparisonData() {
     compareModeLoading.value = true;
+    comparisonVersion.value++;
     try {
       const regionA = compareMode.value.regionA;
       const regionB = compareMode.value.regionB;
       regionDataCache.value[regionA] = generateRegionData(regionA);
       regionDataCache.value[regionB] = generateRegionData(regionB);
       regionUpdateFlag.value++;
+      comparisonVersion.value++;
       await nextTick();
     } finally {
       compareModeLoading.value = false;
@@ -851,7 +862,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     alerts, unreadAlerts, highRiskAlerts, unreadHighRiskCount,
     alertsByLevel, alertsByType,
     highlightedChartId, alertAutoRefresh, lastAlertUpdate,
-    compareMode, compareModeLoading, comparisonData, regionDataA, regionDataB,
+    compareMode, compareModeLoading, comparisonData, comparisonVersion, regionDataA, regionDataB,
     toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData,
     refreshRegionData, updateChartsForRegion,
     refreshAlerts, markAlertAsRead, markAllAlertsAsRead,

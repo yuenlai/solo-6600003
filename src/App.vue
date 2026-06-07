@@ -4,38 +4,30 @@
     <main class="p-6 space-y-4 max-w-7xl mx-auto">
       <FilterBar />
 
-      <Transition name="fade" mode="out-in">
-        <template v-if="compareMode.enabled">
-          <div v-if="compareModeLoading && !comparisonData" key="compare-loading" class="compare-loading">
-            <div class="bg-white dark:bg-gray-800 rounded-xl p-12 shadow-md text-center">
-              <div class="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <h3 class="text-lg font-semibold text-gray-800 dark:text-white mb-2">正在加载对比数据...</h3>
-              <p class="text-gray-500 dark:text-gray-400">准备 {{ compareMode.regionA }} 和 {{ compareMode.regionB }} 的对比数据</p>
-            </div>
+      <div class="main-content-wrapper relative">
+        <Transition name="fade">
+          <div 
+            v-show="compareMode.enabled" 
+            :key="'compare-view'"
+            class="compare-view-container"
+          >
+            <RegionCompareSkeleton v-if="compareModeLoading || !comparisonData" :key="'skeleton-' + comparisonVersion" />
+            <RegionCompare
+              v-else
+              :key="'compare-' + comparisonVersion"
+              :comparison-data="comparisonData"
+              :is-dark="isDark"
+              @refresh="handleRefreshComparison"
+            />
           </div>
-          <RegionCompare
-            v-else-if="comparisonData"
-            key="'compare-view'"
-            :comparison-data="comparisonData"
-            :is-dark="isDark"
-            @refresh="handleRefreshComparison"
-          />
-          <div v-else key="compare-error" class="compare-error">
-            <div class="bg-white dark:bg-gray-800 rounded-xl p-12 shadow-md text-center">
-              <div class="text-6xl mb-4">⚠️</div>
-              <h3 class="text-lg font-semibold text-gray-800 dark:text-white mb-2">数据加载失败</h3>
-              <p class="text-gray-500 dark:text-gray-400 mb-4">无法加载对比数据，请尝试刷新</p>
-              <button 
-                @click="handleRefreshComparison"
-                class="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-              >
-                🔄 重新加载
-              </button>
-            </div>
-          </div>
-        </template>
+        </Transition>
 
-        <div v-else :key="'normal-view'" class="space-y-4">
+        <Transition name="fade">
+          <div 
+            v-show="!compareMode.enabled" 
+            :key="'normal-view'"
+            class="normal-view-container space-y-4"
+          >
           <RegionOverview 
             :overview="regionOverview" 
             @refresh="handleRefreshOverview" 
@@ -118,7 +110,8 @@
             </TransitionGroup>
           </div>
         </div>
-      </Transition>
+        </Transition>
+      </div>
     </main>
 
     <Teleport to="body">
@@ -145,12 +138,14 @@ import ChartCard from './components/ChartCard.vue';
 import RegionOverview from './components/RegionOverview.vue';
 import AlertPanel from './components/AlertPanel.vue';
 import RegionCompare from './components/RegionCompare.vue';
+import RegionCompareSkeleton from './components/RegionCompareSkeleton.vue';
 
 const store = useDashboardStore();
-const { dashboard, isDark, regionOverview, alerts, highlightedChartId, compareMode, compareModeLoading, comparisonData } = storeToRefs(store);
+const { dashboard, isDark, regionOverview, alerts, highlightedChartId, compareMode, compareModeLoading, comparisonData, comparisonVersion } = storeToRefs(store);
 
 watch(() => compareMode.value.enabled, (newVal) => {
   if (newVal) {
+    store.ensureCompareDataLoaded();
     showToast('⚖️ 已切换到地区对比模式', 'info');
   } else {
     showToast('📊 已切换到单地区模式', 'info');
@@ -158,9 +153,7 @@ watch(() => compareMode.value.enabled, (newVal) => {
 });
 
 onMounted(() => {
-  if (compareMode.value.enabled) {
-    store.ensureCompareDataLoaded();
-  }
+  store.ensureCompareDataLoaded();
 });
 
 const chartsContainer = ref<HTMLElement | null>(null);
