@@ -1,8 +1,14 @@
 <template>
   <div :class="{ 'dark': isDark }" class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
     <DashboardHeader />
-    <main class="p-6 space-y-4">
+    <main class="p-6 space-y-4 max-w-7xl mx-auto">
+      <RegionOverview 
+        :overview="regionOverview" 
+        @refresh="handleRefreshOverview" 
+      />
+      
       <FilterBar />
+      
       <div class="grid grid-cols-12 gap-4">
         <div v-for="chart in dashboard.charts" :key="chart.id"
           :class="`col-span-${Math.min(chart.gridArea.w, 12)}`">
@@ -26,31 +32,25 @@ import { storeToRefs } from 'pinia';
 import DashboardHeader from './components/DashboardHeader.vue';
 import FilterBar from './components/FilterBar.vue';
 import ChartCard from './components/ChartCard.vue';
-import { generateTimeSeriesData } from './mock/data';
+import RegionOverview from './components/RegionOverview.vue';
 
 const store = useDashboardStore();
-const { dashboard, isDark } = storeToRefs(store);
+const { dashboard, isDark, regionOverview } = storeToRefs(store);
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 function refreshChart(chartId: string) {
-  const newData = generateTimeSeriesData(6).map(d => d.value);
-  const chart = dashboard.value.charts.find(c => c.id === chartId);
-  if (chart && chart.option.series) {
-    chart.option.series[0].data = newData;
-    store.updateChartData(chartId, { series: chart.option.series });
-  }
+  store.refreshRegionData();
+}
+
+function handleRefreshOverview() {
+  store.refreshRegionData();
 }
 
 onMounted(() => {
-  // Simulate real-time data refresh every 5 seconds
   refreshInterval = setInterval(() => {
-    dashboard.value.charts.forEach(chart => {
-      if (chart.type === 'line') {
-        refreshChart(chart.id);
-      }
-    });
-  }, 5000);
+    store.refreshRegionData();
+  }, 30000);
 });
 
 onUnmounted(() => {

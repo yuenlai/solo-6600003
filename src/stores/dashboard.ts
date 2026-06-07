@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
-import type { Dashboard, ChartConfig, FilterConfig } from '../types';
+import { ref, computed, watch } from 'vue';
+import type { Dashboard, ChartConfig, FilterConfig, RegionData } from '../types';
+import { generateRegionData } from '../mock/data';
 
 export const useDashboardStore = defineStore('dashboard', () => {
   const dashboard = ref<Dashboard>({
     id: 'dashboard-1',
-    name: '数据分析仪表盘',
+    name: '地区经营总览',
     theme: 'light',
     filters: [
       { id: 'f1', field: 'region', label: '地区', type: 'select', value: 'all', options: ['all', '华东', '华南', '华北', '西南'] },
@@ -19,8 +20,17 @@ export const useDashboardStore = defineStore('dashboard', () => {
         option: {
           xAxis: { type: 'category', data: ['1月', '2月', '3月', '4月', '5月', '6月'] },
           yAxis: { type: 'value' },
-          series: [{ data: [820, 932, 901, 934, 1290, 1330], type: 'line', smooth: true }],
-          tooltip: { trigger: 'axis' }
+          series: [
+            { name: '销售额', data: [820, 932, 901, 934, 1290, 1330], type: 'line', smooth: true, yAxisIndex: 0 },
+            { name: '订单量', data: [210, 240, 230, 245, 320, 340], type: 'line', smooth: true, yAxisIndex: 1 }
+          ],
+          tooltip: { trigger: 'axis' },
+          legend: { data: ['销售额', '订单量'], bottom: 0 },
+          grid: { bottom: 40 },
+          yAxis: [
+            { type: 'value', name: '销售额(万)' },
+            { type: 'value', name: '订单数' }
+          ]
         }
       },
       {
@@ -28,14 +38,20 @@ export const useDashboardStore = defineStore('dashboard', () => {
         gridArea: { x: 6, y: 0, w: 6, h: 4 },
         option: {
           xAxis: { type: 'category', data: ['电子产品', '服装', '食品', '家居', '运动'] },
-          yAxis: { type: 'value' },
+          yAxis: { type: 'value', name: '销售额(万)' },
           series: [{ data: [120, 200, 150, 80, 70], type: 'bar' }],
-          tooltip: { trigger: 'axis' }
+          tooltip: { trigger: 'axis', formatter: (params: any) => {
+            const data = params[0];
+            const growth = data.data && typeof data.data === 'object' ? data.data.growth : 0;
+            const growthText = growth >= 0 ? `+${(growth * 100).toFixed(1)}%` : `${(growth * 100).toFixed(1)}%`;
+            const growthColor = growth >= 0 ? '#52c41a' : '#ff4d4f';
+            return `${data.name}<br/>销售额: ${data.value} 万<br/>同比: <span style="color:${growthColor}">${growthText}</span>`;
+          }}
         }
       },
       {
         id: 'chart-3', type: 'pie', title: '市场份额',
-        gridArea: { x: 0, y: 4, w: 4, h: 4 },
+        gridArea: { x: 0, y: 4, w: 6, h: 4 },
         option: {
           series: [{
             type: 'pie', radius: ['40%', '70%'],
@@ -47,35 +63,69 @@ export const useDashboardStore = defineStore('dashboard', () => {
               { value: 300, name: '视频广告' }
             ]
           }],
-          tooltip: { trigger: 'item' }
-        }
-      },
-      {
-        id: 'chart-4', type: 'scatter', title: '数据分布',
-        gridArea: { x: 4, y: 4, w: 4, h: 4 },
-        option: {
-          xAxis: { type: 'value' }, yAxis: { type: 'value' },
-          series: [{ type: 'scatter', data: Array.from({ length: 50 }, () => [Math.random() * 100, Math.random() * 100]), symbolSize: 8 }],
-          tooltip: { trigger: 'item' }
-        }
-      },
-      {
-        id: 'chart-5', type: 'heatmap', title: '访问热力图',
-        gridArea: { x: 8, y: 4, w: 4, h: 4 },
-        option: {
-          xAxis: { type: 'category', data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] },
-          yAxis: { type: 'category', data: ['0-6', '6-12', '12-18', '18-24'] },
-          visualMap: { min: 0, max: 100, calculable: true },
-          series: [{
-            type: 'heatmap',
-            data: Array.from({ length: 28 }, (_, i) => [Math.floor(i / 4), i % 4, Math.floor(Math.random() * 100)])
-          }]
+          tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)' },
+          legend: { orient: 'vertical', right: 10, top: 'center' }
         }
       }
     ]
   });
 
+  const regionDataCache = ref<Record<string, RegionData>>({});
+
+  const currentRegion = computed(() => {
+    const regionFilter = dashboard.value.filters.find(f => f.field === 'region');
+    return regionFilter ? regionFilter.value : 'all';
+  });
+
+  const currentRegionData = computed(() => {
+    const region = currentRegion.value;
+    if (!regionDataCache.value[region]) {
+      regionDataCache.value[region] = generateRegionData(region);
+    }
+    return regionDataCache.value[region];
+  });
+
+  const regionOverview = computed(() => currentRegionData.value.overview);
+
   const isDark = computed(() => dashboard.value.theme === 'dark');
+
+  function formatNumber(num: number): string {
+    if (num >= 10000) {
+      return (num / 10000).toFixed(1);
+    }
+    return num.toString();
+  }
+
+  function updateChartsForRegion(region: string) {
+    if (!regionDataCache.value[region]) {
+      regionDataCache.value[region] = generateRegionData(region);
+    }
+    const data = regionDataCache.value[region];
+
+    const salesTrendChart = dashboard.value.charts.find(c => c.id === 'chart-1');
+    if (salesTrendChart) {
+      salesTrendChart.option.xAxis.data = data.salesTrend.months;
+      salesTrendChart.option.series[0].data = data.salesTrend.sales.map(s => Number(formatNumber(s)));
+      salesTrendChart.option.series[1].data = data.salesTrend.orders.map(o => Number(formatNumber(o)));
+    }
+
+    const categoryChart = dashboard.value.charts.find(c => c.id === 'chart-2');
+    if (categoryChart) {
+      categoryChart.option.xAxis.data = data.categorySales.categories;
+      categoryChart.option.series[0].data = data.categorySales.sales.map((s, i) => ({
+        value: Number(formatNumber(s)),
+        growth: data.categorySales.growth[i]
+      }));
+    }
+
+    const marketShareChart = dashboard.value.charts.find(c => c.id === 'chart-3');
+    if (marketShareChart) {
+      marketShareChart.option.series[0].data = data.marketShare.channels.map(c => ({
+        name: c.name,
+        value: Number(formatNumber(c.value))
+      }));
+    }
+  }
 
   function toggleTheme() {
     dashboard.value.theme = dashboard.value.theme === 'light' ? 'dark' : 'light';
@@ -83,7 +133,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   function updateFilter(filterId: string, value: any) {
     const filter = dashboard.value.filters.find(f => f.id === filterId);
-    if (filter) filter.value = value;
+    if (filter) {
+      filter.value = value;
+      if (filter.field === 'region') {
+        updateChartsForRegion(value);
+      }
+    }
   }
 
   function updateChartGrid(chartId: string, gridArea: ChartConfig['gridArea']) {
@@ -104,8 +159,18 @@ export const useDashboardStore = defineStore('dashboard', () => {
     if (chart) chart.option = { ...chart.option, ...option };
   }
 
+  function refreshRegionData() {
+    const region = currentRegion.value;
+    regionDataCache.value[region] = generateRegionData(region);
+    updateChartsForRegion(region);
+  }
+
+  updateChartsForRegion('all');
+
   return {
     dashboard, isDark,
-    toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData
+    currentRegion, currentRegionData, regionOverview,
+    toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData,
+    refreshRegionData, updateChartsForRegion
   };
 });
