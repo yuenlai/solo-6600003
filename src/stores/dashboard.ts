@@ -273,7 +273,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
   });
 
   const hasDateRangeFilter = computed(() => {
-    return currentDateRange.value.startDate && currentDateRange.value.endDate;
+    return currentDateRange.value.startDate 
+      && currentDateRange.value.endDate
+      && currentDateRange.value.startDate <= currentDateRange.value.endDate;
   });
 
   const activeFilters = computed(() => {
@@ -285,7 +287,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
         return filter.value && filter.value.trim() !== '';
       }
       if (filter.type === 'date-range') {
-        return filter.value && filter.value.length > 0;
+        return Array.isArray(filter.value) 
+          && filter.value.length === 2 
+          && filter.value[0] 
+          && filter.value[1]
+          && filter.value[0] <= filter.value[1];
       }
       return false;
     });
@@ -318,7 +324,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
     if (keywordFilter && keywordFilter.value && keywordFilter.value.trim() !== '') {
       hitRate *= 0.3;
     }
-    if (dateFilter && Array.isArray(dateFilter.value) && dateFilter.value.length === 2 && dateFilter.value[0] && dateFilter.value[1]) {
+    const dateRangeValid = dateFilter 
+      && Array.isArray(dateFilter.value) 
+      && dateFilter.value.length === 2 
+      && dateFilter.value[0] 
+      && dateFilter.value[1]
+      && dateFilter.value[0] <= dateFilter.value[1];
+    
+    if (dateRangeValid) {
       const start = new Date(dateFilter.value[0]);
       const end = new Date(dateFilter.value[1]);
       const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;

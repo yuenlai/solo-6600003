@@ -336,9 +336,23 @@ function getDateRangeArray(filterId: string): string[] {
 function handleStartDateChange(filterId: string, event: Event) {
   const target = event.target as HTMLInputElement;
   const currentRange = getDateRangeArray(filterId);
-  const endDate = currentRange[1];
+  let endDate = currentRange[1];
   
-  if (endDate && target.value > endDate) {
+  if (!target.value) {
+    const newRange = ['', endDate];
+    activeQuickDate.value[filterId] = '';
+    store.updateFilter(filterId, newRange);
+    return;
+  }
+  
+  if (!endDate) {
+    const start = new Date(target.value);
+    const defaultEnd = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const today = new Date();
+    endDate = formatDate(defaultEnd > today ? today : defaultEnd);
+  }
+  
+  if (target.value > endDate) {
     target.value = endDate;
   }
   
@@ -350,9 +364,22 @@ function handleStartDateChange(filterId: string, event: Event) {
 function handleEndDateChange(filterId: string, event: Event) {
   const target = event.target as HTMLInputElement;
   const currentRange = getDateRangeArray(filterId);
-  const startDate = currentRange[0];
+  let startDate = currentRange[0];
   
-  if (startDate && target.value < startDate) {
+  if (!target.value) {
+    const newRange = [startDate, ''];
+    activeQuickDate.value[filterId] = '';
+    store.updateFilter(filterId, newRange);
+    return;
+  }
+  
+  if (!startDate) {
+    const end = new Date(target.value);
+    const defaultStart = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    startDate = formatDate(defaultStart);
+  }
+  
+  if (target.value < startDate) {
     target.value = startDate;
   }
   
@@ -420,7 +447,11 @@ function formatFilterValue(filter: FilterConfig & { field: string }): string {
     return `${icon} ${name}`;
   }
   if (filter.type === 'date-range' && Array.isArray(filter.value)) {
-    return filter.value.join(' ~ ') || '未设置';
+    const isValid = filter.value.length === 2 
+      && filter.value[0] 
+      && filter.value[1] 
+      && filter.value[0] <= filter.value[1];
+    return isValid ? filter.value.join(' ~ ') : '未设置';
   }
   return String(filter.value) || '未设置';
 }
