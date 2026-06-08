@@ -64,85 +64,164 @@ export function generateHeatmapData(xLen: number, yLen: number): [number, number
   return data;
 }
 
-export function generateRegionOverview(region: string, forceRandom: boolean = false): RegionOverview {
+export function generateRegionOverview(
+  region: string,
+  forceRandom: boolean = false,
+  dateRange?: { startDate: string | null; endDate: string | null }
+): RegionOverview {
   const baseline = REGION_BASELINES[region] || REGION_BASELINES['all'];
   const rand = forceRandom ? () => Math.random() : seededRandom(regionSeed(region));
-  const baseSales = Math.floor(5000000 * baseline.sales * (0.9 + rand() * 0.2));
-  const baseOrders = Math.floor(120000 * baseline.sales * (0.9 + rand() * 0.2));
+  
+  const dateRangeMultiplier = dateRange?.startDate && dateRange?.endDate 
+    ? calculateDateRangeMultiplier(dateRange.startDate, dateRange.endDate)
+    : 1;
+  
+  const baseSales = Math.floor(5000000 * baseline.sales * (0.9 + rand() * 0.2) * dateRangeMultiplier);
+  const baseOrders = Math.floor(120000 * baseline.sales * (0.9 + rand() * 0.2) * dateRangeMultiplier);
+  
+  const growthAdjustment = dateRange?.startDate && dateRange?.endDate 
+    ? calculateGrowthAdjustment(dateRange.startDate, dateRange.endDate)
+    : 1;
   
   return {
     region: region === 'all' ? '全国' : region,
     totalSales: baseSales,
-    salesGrowth: baseline.growth + (rand() - 0.5) * 0.04,
+    salesGrowth: (baseline.growth + (rand() - 0.5) * 0.04) * growthAdjustment,
     orderCount: baseOrders,
-    orderGrowth: baseline.growth * 0.8 + (rand() - 0.5) * 0.03,
+    orderGrowth: (baseline.growth * 0.8 + (rand() - 0.5) * 0.03) * growthAdjustment,
     avgOrderValue: Math.floor(baseSales / baseOrders),
-    avgOrderGrowth: baseline.growth * 0.3 + (rand() - 0.5) * 0.02,
-    customerCount: Math.floor(85000 * baseline.sales * (0.9 + rand() * 0.2)),
-    customerGrowth: baseline.growth * 1.1 + (rand() - 0.5) * 0.03
+    avgOrderGrowth: (baseline.growth * 0.3 + (rand() - 0.5) * 0.02) * growthAdjustment,
+    customerCount: Math.floor(85000 * baseline.sales * (0.9 + rand() * 0.2) * Math.sqrt(dateRangeMultiplier)),
+    customerGrowth: (baseline.growth * 1.1 + (rand() - 0.5) * 0.03) * growthAdjustment
   };
 }
 
-export function generateRegionSalesTrend(region: string): { months: string[]; sales: number[]; orders: number[] } {
-  const baseline = REGION_BASELINES[region] || REGION_BASELINES['all'];
-  
-  const baseSales = 600000;
-  const sales: number[] = [];
-  
-  for (let i = 0; i < MONTHS.length; i++) {
-    let value = baseSales + i * 50000;
-    let isAnomaly = false;
-    
-    if (i === 2) {
-      value = value * 1.5;
-      isAnomaly = true;
-    } else if (i === 3) {
-      value = value * 0.6;
-      isAnomaly = true;
-    } else if (i >= 4) {
-      value = baseSales + 4 * 50000 - (i - 3) * 100000;
-      isAnomaly = true;
-    }
-    
-    if (isAnomaly) {
-      value = value * baseline.sales;
-    } else {
-      value = value * baseline.sales * (0.95 + Math.random() * 0.1);
-    }
-    sales.push(Math.floor(Math.max(100000, value)));
-  }
-  
-  const baseOrders = 15000;
-  const orders: number[] = [];
-  
-  for (let i = 0; i < MONTHS.length; i++) {
-    let value = baseOrders + i * 1200;
-    let isAnomaly = false;
-    
-    if (i === 2) {
-      value = value * 1.45;
-      isAnomaly = true;
-    } else if (i === 3) {
-      value = value * 0.55;
-      isAnomaly = true;
-    } else if (i >= 4) {
-      value = baseOrders + 4 * 1200 - (i - 3) * 25000;
-      isAnomaly = true;
-    }
-    
-    if (isAnomaly) {
-      value = value * baseline.sales;
-    } else {
-      value = value * baseline.sales * (0.95 + Math.random() * 0.1);
-    }
-    orders.push(Math.floor(Math.max(5000, value)));
-  }
-  
-  return { months: MONTHS, sales, orders };
+function calculateGrowthAdjustment(startDate: string, endDate: string): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  if (diffDays <= 7) return 1.5;
+  if (diffDays <= 30) return 1.2;
+  if (diffDays <= 90) return 1.0;
+  return 0.9;
 }
 
-export function generateRegionCategorySales(region: string): { categories: string[]; sales: number[]; growth: number[] } {
+export function generateRegionSalesTrend(
+  region: string,
+  dateRange?: { startDate: string | null; endDate: string | null }
+): { months: string[]; sales: number[]; orders: number[] } {
   const baseline = REGION_BASELINES[region] || REGION_BASELINES['all'];
+  
+  let labels: string[];
+  let dataPoints: number;
+  
+  if (dateRange?.startDate && dateRange?.endDate) {
+    const start = new Date(dateRange.startDate);
+    const end = new Date(dateRange.endDate);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    
+    if (diffDays <= 31) {
+      dataPoints = diffDays;
+      labels = Array.from({ length: dataPoints }, (_, i) => {
+        const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+        return `${d.getMonth() + 1}/${d.getDate()}`;
+      });
+    } else if (diffDays <= 180) {
+      dataPoints = Math.min(Math.ceil(diffDays / 7), 12);
+      labels = Array.from({ length: dataPoints }, (_, i) => {
+        const d = new Date(start.getTime() + i * 7 * 24 * 60 * 60 * 1000);
+        return `${d.getMonth() + 1}/${d.getDate()}`;
+      });
+    } else {
+      dataPoints = Math.min(Math.ceil(diffDays / 30), 12);
+      labels = Array.from({ length: dataPoints }, (_, i) => {
+        const d = new Date(start.getTime() + i * 30 * 24 * 60 * 60 * 1000);
+        return `${d.getFullYear()}/${d.getMonth() + 1}`;
+      });
+    }
+  } else {
+    labels = [...MONTHS];
+    dataPoints = MONTHS.length;
+  }
+  
+  const dateRangeMultiplier = dateRange?.startDate && dateRange?.endDate 
+    ? calculateDateRangeMultiplier(dateRange.startDate, dateRange.endDate)
+    : 1;
+  
+  const baseSales = 600000 * dateRangeMultiplier;
+  const sales: number[] = [];
+  const rand = seededRandom(regionSeed(region) + (dateRange?.startDate || '').length);
+  
+  for (let i = 0; i < dataPoints; i++) {
+    let value = baseSales + i * (baseSales * 0.08);
+    let isAnomaly = false;
+    
+    const anomalyChance = rand();
+    if (anomalyChance > 0.85) {
+      value = value * (1.3 + rand() * 0.4);
+      isAnomaly = true;
+    } else if (anomalyChance < 0.15) {
+      value = value * (0.5 + rand() * 0.2);
+      isAnomaly = true;
+    }
+    
+    if (isAnomaly) {
+      value = value * baseline.sales;
+    } else {
+      value = value * baseline.sales * (0.9 + rand() * 0.2);
+    }
+    sales.push(Math.floor(Math.max(10000, value)));
+  }
+  
+  const baseOrders = 15000 * dateRangeMultiplier;
+  const orders: number[] = [];
+  
+  for (let i = 0; i < dataPoints; i++) {
+    let value = baseOrders + i * (baseOrders * 0.06);
+    let isAnomaly = false;
+    
+    const anomalyChance = rand();
+    if (anomalyChance > 0.88) {
+      value = value * (1.25 + rand() * 0.3);
+      isAnomaly = true;
+    } else if (anomalyChance < 0.12) {
+      value = value * (0.55 + rand() * 0.2);
+      isAnomaly = true;
+    }
+    
+    if (isAnomaly) {
+      value = value * baseline.sales;
+    } else {
+      value = value * baseline.sales * (0.9 + rand() * 0.2);
+    }
+    orders.push(Math.floor(Math.max(1000, value)));
+  }
+  
+  return { months: labels, sales, orders };
+}
+
+function calculateDateRangeMultiplier(startDate: string, endDate: string): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const avgDaysPerMonth = 30;
+  return Math.max(0.1, Math.min(3, diffDays / avgDaysPerMonth));
+}
+
+export function generateRegionCategorySales(
+  region: string,
+  dateRange?: { startDate: string | null; endDate: string | null }
+): { categories: string[]; sales: number[]; growth: number[] } {
+  const baseline = REGION_BASELINES[region] || REGION_BASELINES['all'];
+  
+  const dateRangeMultiplier = dateRange?.startDate && dateRange?.endDate 
+    ? calculateDateRangeMultiplier(dateRange.startDate, dateRange.endDate)
+    : 1;
+  
+  const growthAdjustment = dateRange?.startDate && dateRange?.endDate 
+    ? calculateGrowthAdjustment(dateRange.startDate, dateRange.endDate)
+    : 1;
   
   const categoryWeights: Record<string, number> = {
     '电子产品': region === '华东' ? 1.4 : region === '华南' ? 1.2 : 1.0,
@@ -153,8 +232,10 @@ export function generateRegionCategorySales(region: string): { categories: strin
   };
   
   const baseValues = [1500000, 1200000, 1000000, 800000, 600000];
+  const rand = seededRandom(regionSeed(region) + (dateRange?.startDate || '').length * 2);
+  
   const sales = CATEGORIES.map((cat, i) => {
-    let value = baseValues[i] * baseline.sales * (categoryWeights[cat] || 1.0);
+    let value = baseValues[i] * baseline.sales * (categoryWeights[cat] || 1.0) * dateRangeMultiplier;
     let isAnomaly = false;
     
     if (cat === '电子产品') {
@@ -167,23 +248,30 @@ export function generateRegionCategorySales(region: string): { categories: strin
     if (isAnomaly) {
       value = value;
     } else {
-      value = value * (0.95 + Math.random() * 0.1);
+      value = value * (0.9 + rand() * 0.2);
     }
     return Math.floor(value);
   });
   
   const growth = CATEGORIES.map((cat, _i) => {
     if (cat === '电子产品') {
-      return 0.6 + Math.random() * 0.2;
+      return (0.6 + rand() * 0.2) * growthAdjustment;
     }
-    return baseline.growth + (Math.random() - 0.5) * 0.1;
+    return (baseline.growth + (rand() - 0.5) * 0.1) * growthAdjustment;
   });
   
   return { categories: CATEGORIES, sales, growth };
 }
 
-export function generateRegionMarketShare(region: string): { channels: { name: string; value: number }[] } {
+export function generateRegionMarketShare(
+  region: string,
+  dateRange?: { startDate: string | null; endDate: string | null }
+): { channels: { name: string; value: number }[] } {
   const baseline = REGION_BASELINES[region] || REGION_BASELINES['all'];
+  
+  const dateRangeMultiplier = dateRange?.startDate && dateRange?.endDate 
+    ? calculateDateRangeMultiplier(dateRange.startDate, dateRange.endDate)
+    : 1;
   
   const channelWeights: Record<string, Record<string, number>> = {
     '华东': { '搜索引擎': 1.1, '直接访问': 1.0, '邮件营销': 1.2, '联盟广告': 0.9, '视频广告': 1.15 },
@@ -196,8 +284,10 @@ export function generateRegionMarketShare(region: string): { channels: { name: s
   const weights = channelWeights[region] || channelWeights['all'];
   
   const baseValues = [1000000, 800000, 600000, 500000, 300000];
+  const rand = seededRandom(regionSeed(region) + (dateRange?.startDate || '').length * 3);
+  
   const channels = CHANNELS.map((name, i) => {
-    let value = baseValues[i] * baseline.sales * (weights[name] || 1.0);
+    let value = baseValues[i] * baseline.sales * (weights[name] || 1.0) * dateRangeMultiplier;
     let isAnomaly = false;
     
     if (name === '视频广告') {
@@ -210,7 +300,7 @@ export function generateRegionMarketShare(region: string): { channels: { name: s
     if (isAnomaly) {
       value = value;
     } else {
-      value = value * (0.95 + Math.random() * 0.1);
+      value = value * (0.9 + rand() * 0.2);
     }
     return {
       name,
@@ -221,12 +311,15 @@ export function generateRegionMarketShare(region: string): { channels: { name: s
   return { channels };
 }
 
-export function generateRegionData(region: string): RegionData {
+export function generateRegionData(
+  region: string,
+  dateRange?: { startDate: string | null; endDate: string | null }
+): RegionData {
   return {
-    overview: generateRegionOverview(region),
-    salesTrend: generateRegionSalesTrend(region),
-    categorySales: generateRegionCategorySales(region),
-    marketShare: generateRegionMarketShare(region)
+    overview: generateRegionOverview(region, false, dateRange),
+    salesTrend: generateRegionSalesTrend(region, dateRange),
+    categorySales: generateRegionCategorySales(region, dateRange),
+    marketShare: generateRegionMarketShare(region, dateRange)
   };
 }
 

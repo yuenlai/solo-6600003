@@ -74,6 +74,20 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   const regionDataCache = ref<Record<string, RegionData>>({});
   const regionUpdateFlag = ref(0);
+  const dateRangeUpdateFlag = ref(0);
+
+  function getRegionCacheKey(region: string, dateRangeStr?: string): string {
+    const dr = dateRangeStr ?? getCurrentDateRangeString();
+    return `${region}${dr ? `_${dr}` : ''}`;
+  }
+
+  function getCurrentDateRangeString(): string {
+    const dateFilter = dashboard.value.filters.find(f => f.field === 'dateRange');
+    if (dateFilter && Array.isArray(dateFilter.value) && dateFilter.value.length === 2 && dateFilter.value[0] && dateFilter.value[1]) {
+      return `${dateFilter.value[0]}_${dateFilter.value[1]}`;
+    }
+    return '';
+  }
 
   const compareMode = ref<CompareModeState>({
     enabled: false,
@@ -178,6 +192,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       const regionFilter = dashboard.value.filters.find((f: FilterConfig) => f.field === 'region');
       if (regionFilter && regionFilter.value) {
         regionUpdateFlag.value++;
+        dateRangeUpdateFlag.value++;
         updateChartsForRegion(regionFilter.value);
         refreshAlerts(true);
       }
@@ -186,8 +201,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
         ensureCompareDataLoaded();
         comparisonVersion.value++;
         regionUpdateFlag.value++;
+        dateRangeUpdateFlag.value++;
       } else if (previousCompareEnabled && !newCompareEnabled) {
         regionUpdateFlag.value++;
+        dateRangeUpdateFlag.value++;
       }
 
       comparisonVersion.value++;
@@ -244,6 +261,21 @@ export const useDashboardStore = defineStore('dashboard', () => {
     return regionFilter ? regionFilter.value : 'all';
   });
 
+  const currentDateRange = computed(() => {
+    const dateFilter = dashboard.value.filters.find(f => f.field === 'dateRange');
+    if (dateFilter && Array.isArray(dateFilter.value) && dateFilter.value.length === 2) {
+      return {
+        startDate: dateFilter.value[0] || null,
+        endDate: dateFilter.value[1] || null
+      };
+    }
+    return { startDate: null, endDate: null };
+  });
+
+  const hasDateRangeFilter = computed(() => {
+    return currentDateRange.value.startDate && currentDateRange.value.endDate;
+  });
+
   const activeFilters = computed(() => {
     return dashboard.value.filters.filter(filter => {
       if (filter.type === 'select') {
@@ -276,6 +308,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const filterHitScope = computed(() => {
     const region = currentRegion.value;
     const overview = currentRegionData.value.overview;
+    dateRangeUpdateFlag.value;
     
     const totalRecords = 1000;
     const keywordFilter = dashboard.value.filters.find(f => f.field === 'keyword');
@@ -285,8 +318,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
     if (keywordFilter && keywordFilter.value && keywordFilter.value.trim() !== '') {
       hitRate *= 0.3;
     }
-    if (dateFilter && dateFilter.value && dateFilter.value.length > 0) {
-      hitRate *= 0.5;
+    if (dateFilter && Array.isArray(dateFilter.value) && dateFilter.value.length === 2 && dateFilter.value[0] && dateFilter.value[1]) {
+      const start = new Date(dateFilter.value[0]);
+      const end = new Date(dateFilter.value[1]);
+      const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      hitRate *= Math.max(0.1, Math.min(0.8, diffDays / 180));
     }
     if (region !== 'all') {
       hitRate *= 0.4;
@@ -311,33 +347,40 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const currentRegionData = computed(() => {
     const region = currentRegion.value;
     regionUpdateFlag.value;
-    if (!regionDataCache.value[region]) {
-      regionDataCache.value[region] = generateRegionData(region);
+    dateRangeUpdateFlag.value;
+    const cacheKey = getRegionCacheKey(region);
+    if (!regionDataCache.value[cacheKey]) {
+      regionDataCache.value[cacheKey] = generateRegionData(region, currentDateRange.value);
     }
-    return regionDataCache.value[region];
+    return regionDataCache.value[cacheKey];
   });
 
   const regionOverview = computed(() => {
     regionUpdateFlag.value;
+    dateRangeUpdateFlag.value;
     return currentRegionData.value.overview;
   });
 
   const regionDataA = computed(() => {
     regionUpdateFlag.value;
+    dateRangeUpdateFlag.value;
     const region = compareMode.value.regionA;
-    if (!regionDataCache.value[region]) {
-      regionDataCache.value[region] = generateRegionData(region);
+    const cacheKey = getRegionCacheKey(region);
+    if (!regionDataCache.value[cacheKey]) {
+      regionDataCache.value[cacheKey] = generateRegionData(region, currentDateRange.value);
     }
-    return regionDataCache.value[region];
+    return regionDataCache.value[cacheKey];
   });
 
   const regionDataB = computed(() => {
     regionUpdateFlag.value;
+    dateRangeUpdateFlag.value;
     const region = compareMode.value.regionB;
-    if (!regionDataCache.value[region]) {
-      regionDataCache.value[region] = generateRegionData(region);
+    const cacheKey = getRegionCacheKey(region);
+    if (!regionDataCache.value[cacheKey]) {
+      regionDataCache.value[cacheKey] = generateRegionData(region, currentDateRange.value);
     }
-    return regionDataCache.value[region];
+    return regionDataCache.value[cacheKey];
   });
 
   const METRIC_CONFIGS: { metric: MetricName; label: string; icon: string }[] = [
@@ -474,10 +517,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   function updateChartsForRegion(region: string) {
-    if (!regionDataCache.value[region]) {
-      regionDataCache.value[region] = generateRegionData(region);
+    const cacheKey = getRegionCacheKey(region);
+    if (!regionDataCache.value[cacheKey]) {
+      regionDataCache.value[cacheKey] = generateRegionData(region, currentDateRange.value);
     }
-    const data = regionDataCache.value[region];
+    const data = regionDataCache.value[cacheKey];
 
     const salesTrendChart = dashboard.value.charts.find(c => c.id === 'chart-1');
     if (salesTrendChart) {
@@ -538,6 +582,15 @@ export const useDashboardStore = defineStore('dashboard', () => {
         regionUpdateFlag.value++;
         updateChartsForRegion(value);
         refreshAlerts(true);
+      } else if (filter.field === 'dateRange') {
+        dateRangeUpdateFlag.value++;
+        const region = currentRegion.value;
+        updateChartsForRegion(region);
+        refreshAlerts(true);
+        if (compareMode.value.enabled) {
+          comparisonVersion.value++;
+          ensureCompareDataLoaded();
+        }
       }
     }
   }
@@ -563,6 +616,15 @@ export const useDashboardStore = defineStore('dashboard', () => {
         regionUpdateFlag.value++;
         updateChartsForRegion(filter.value);
         refreshAlerts(true);
+      } else if (filter.field === 'dateRange') {
+        dateRangeUpdateFlag.value++;
+        const region = currentRegion.value;
+        updateChartsForRegion(region);
+        refreshAlerts(true);
+        if (compareMode.value.enabled) {
+          comparisonVersion.value++;
+          ensureCompareDataLoaded();
+        }
       }
     }
   }
@@ -582,6 +644,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
     clearCurrentScheme();
     regionUpdateFlag.value++;
+    dateRangeUpdateFlag.value++;
     updateChartsForRegion('all');
     refreshAlerts(true);
   }
@@ -926,7 +989,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
   function createCustomChart(type: ChartConfig['type'], title: string, dimension: DataDimension): ChartConfig {
     const id = `chart-custom-${Date.now()}`;
     const region = currentRegion.value;
-    const data = regionDataCache.value[region] || generateRegionData(region);
+    const cacheKey = getRegionCacheKey(region);
+    const data = regionDataCache.value[cacheKey] || generateRegionData(region, currentDateRange.value);
     
     const chartsCount = dashboard.value.charts.length;
     const row = Math.floor(chartsCount / 2) * 4;
@@ -957,8 +1021,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
     if (!chart || !chart.isCustom || !chart.dataDimension) return;
 
     const region = currentRegion.value;
-    const data = generateRegionData(region);
-    regionDataCache.value[region] = data;
+    const cacheKey = getRegionCacheKey(region);
+    const data = generateRegionData(region, currentDateRange.value);
+    regionDataCache.value[cacheKey] = data;
     
     const newOption = generateChartOption(chart.type, chart.dataDimension, data);
     chart.option = { ...newOption };
@@ -966,8 +1031,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   function refreshRegionData() {
     const region = currentRegion.value;
-    regionDataCache.value[region] = generateRegionData(region);
+    const cacheKey = getRegionCacheKey(region);
+    regionDataCache.value[cacheKey] = generateRegionData(region, currentDateRange.value);
     regionUpdateFlag.value++;
+    dateRangeUpdateFlag.value++;
     updateChartsForRegion(region);
     
     dashboard.value.charts.forEach(chart => {
@@ -1069,7 +1136,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
       await nextTick();
       const dimension = getChartDimension(chartId);
       const region = currentRegion.value;
-      const regionData = regionDataCache.value[region] || generateRegionData(region);
+      const cacheKey = getRegionCacheKey(region);
+      const regionData = regionDataCache.value[cacheKey] || generateRegionData(region, currentDateRange.value);
       chartDetailData.value = generateChartDetailData(
         chartId,
         chart.title,
@@ -1104,11 +1172,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
     const regionA = compareMode.value.regionA;
     const regionB = compareMode.value.regionB;
     
-    if (!regionDataCache.value[regionA]) {
-      regionDataCache.value[regionA] = generateRegionData(regionA);
+    const cacheKeyA = getRegionCacheKey(regionA);
+    const cacheKeyB = getRegionCacheKey(regionB);
+    
+    if (!regionDataCache.value[cacheKeyA]) {
+      regionDataCache.value[cacheKeyA] = generateRegionData(regionA, currentDateRange.value);
     }
-    if (!regionDataCache.value[regionB]) {
-      regionDataCache.value[regionB] = generateRegionData(regionB);
+    if (!regionDataCache.value[cacheKeyB]) {
+      regionDataCache.value[cacheKeyB] = generateRegionData(regionB, currentDateRange.value);
     }
   }
 
@@ -1163,9 +1234,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
     try {
       const regionA = compareMode.value.regionA;
       const regionB = compareMode.value.regionB;
-      regionDataCache.value[regionA] = generateRegionData(regionA);
-      regionDataCache.value[regionB] = generateRegionData(regionB);
+      const cacheKeyA = getRegionCacheKey(regionA);
+      const cacheKeyB = getRegionCacheKey(regionB);
+      regionDataCache.value[cacheKeyA] = generateRegionData(regionA, currentDateRange.value);
+      regionDataCache.value[cacheKeyB] = generateRegionData(regionB, currentDateRange.value);
       regionUpdateFlag.value++;
+      dateRangeUpdateFlag.value++;
       comparisonVersion.value++;
       await nextTick();
     } finally {
@@ -1180,6 +1254,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   return {
     dashboard, isDark,
     currentRegion, currentRegionData, regionOverview,
+    currentDateRange, hasDateRangeFilter,
     alerts, unreadAlerts, highRiskAlerts, unreadHighRiskCount,
     alertsByLevel, alertsByType,
     highlightedChartId, alertAutoRefresh, lastAlertUpdate,

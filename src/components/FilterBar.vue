@@ -218,23 +218,64 @@
       </div>
     </div>
 
-    <div class="other-filters flex items-center gap-4 flex-wrap pt-3 border-t border-gray-200 dark:border-gray-700">
+    <div class="other-filters flex items-start gap-4 flex-wrap pt-3 border-t border-gray-200 dark:border-gray-700">
       <div v-for="filter in otherFilters" :key="filter.id" class="flex items-center gap-2">
         <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ filter.label }}:</label>
         <input v-if="filter.type === 'text'" :value="filter.value" type="text"
           @input="handleTextFilterInput(filter.id, $event)"
           :placeholder="filter.label"
           class="text-sm border rounded px-2 py-1 w-40 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-        <input v-else-if="filter.type === 'date-range'" type="date"
-          @change="store.updateFilter(filter.id, filter.value)"
-          class="text-sm border rounded px-2 py-1 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+        <div v-else-if="filter.type === 'date-range'" class="date-range-picker">
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <input
+                type="date"
+                :value="getDateRangeValue(filter.id, 0)"
+                @change="handleStartDateChange(filter.id, $event)"
+                :max="getDateRangeValue(filter.id, 1) || ''"
+                class="text-sm border rounded px-2 py-1 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+              <span class="text-gray-400 dark:text-gray-500">至</span>
+              <input
+                type="date"
+                :value="getDateRangeValue(filter.id, 1)"
+                @change="handleEndDateChange(filter.id, $event)"
+                :min="getDateRangeValue(filter.id, 0) || ''"
+                class="text-sm border rounded px-2 py-1 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+              <button
+                v-if="hasDateRangeValue(filter.id)"
+                @click="handleClearDateRange(filter.id)"
+                class="text-sm text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                title="清除日期范围"
+              >
+                ✕
+              </button>
+            </div>
+            <div class="flex items-center gap-1 flex-wrap">
+              <button
+                v-for="quick in quickDateOptions"
+                :key="quick.label"
+                @click="handleQuickDateSelect(filter.id, quick)"
+                :class="[
+                  'text-xs px-2 py-1 rounded transition-all duration-200',
+                  isQuickDateActive(filter.id, quick)
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                ]"
+              >
+                {{ quick.label }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useDashboardStore } from '../stores/dashboard';
 import { storeToRefs } from 'pinia';
 import type { FilterConfig } from '../types';
@@ -248,6 +289,107 @@ const {
   allActiveFilters, 
   filterHitScope 
 } = storeToRefs(store);
+
+interface QuickDateOption {
+  label: string;
+  days: number;
+}
+
+const quickDateOptions: QuickDateOption[] = [
+  { label: '近7天', days: 7 },
+  { label: '近30天', days: 30 },
+  { label: '近90天', days: 90 },
+  { label: '本月', days: 0 },
+  { label: '上月', days: -1 }
+];
+
+const activeQuickDate = ref<Record<string, string>>({});
+
+function formatDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getDateRangeValue(filterId: string, index: number): string {
+  const filter = dashboard.value.filters.find(f => f.id === filterId);
+  if (filter && Array.isArray(filter.value) && filter.value[index]) {
+    return filter.value[index];
+  }
+  return '';
+}
+
+function hasDateRangeValue(filterId: string): boolean {
+  const filter = dashboard.value.filters.find(f => f.id === filterId);
+  return !!(filter && Array.isArray(filter.value) && filter.value.length > 0 && filter.value.some((v: string) => v));
+}
+
+function getDateRangeArray(filterId: string): string[] {
+  const filter = dashboard.value.filters.find(f => f.id === filterId);
+  if (filter && Array.isArray(filter.value)) {
+    return [...filter.value];
+  }
+  return ['', ''];
+}
+
+function handleStartDateChange(filterId: string, event: Event) {
+  const target = event.target as HTMLInputElement;
+  const currentRange = getDateRangeArray(filterId);
+  const endDate = currentRange[1];
+  
+  if (endDate && target.value > endDate) {
+    target.value = endDate;
+  }
+  
+  const newRange = [target.value, endDate];
+  activeQuickDate.value[filterId] = '';
+  store.updateFilter(filterId, newRange);
+}
+
+function handleEndDateChange(filterId: string, event: Event) {
+  const target = event.target as HTMLInputElement;
+  const currentRange = getDateRangeArray(filterId);
+  const startDate = currentRange[0];
+  
+  if (startDate && target.value < startDate) {
+    target.value = startDate;
+  }
+  
+  const newRange = [startDate, target.value];
+  activeQuickDate.value[filterId] = '';
+  store.updateFilter(filterId, newRange);
+}
+
+function handleClearDateRange(filterId: string) {
+  activeQuickDate.value[filterId] = '';
+  store.clearFilter(filterId);
+}
+
+function handleQuickDateSelect(filterId: string, option: QuickDateOption) {
+  const today = new Date();
+  let startDate: Date;
+  let endDate: Date;
+  
+  if (option.days === 0) {
+    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    endDate = today;
+  } else if (option.days === -1) {
+    startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+  } else {
+    endDate = today;
+    startDate = new Date(today.getTime() - (option.days - 1) * 24 * 60 * 60 * 1000);
+  }
+  
+  const newRange = [formatDate(startDate), formatDate(endDate)];
+  activeQuickDate.value[filterId] = option.label;
+  store.updateFilter(filterId, newRange);
+}
+
+function isQuickDateActive(filterId: string, option: QuickDateOption): boolean {
+  return activeQuickDate.value[filterId] === option.label;
+}
 
 const regionFilter = computed(() => 
   dashboard.value.filters.find(f => f.field === 'region')
@@ -333,6 +475,18 @@ function getRegionIcon(region: string): string {
     default: return '📍';
   }
 }
+
+watch(() => dashboard.value.filters, (newFilters) => {
+  newFilters.forEach(filter => {
+    if (filter.type === 'date-range') {
+      if (!Array.isArray(filter.value) || filter.value.length === 0 || !filter.value.some((v: string) => v)) {
+        if (activeQuickDate.value[filter.id]) {
+          activeQuickDate.value[filter.id] = '';
+        }
+      }
+    }
+  });
+}, { deep: true });
 </script>
 
 <style scoped>
