@@ -6,14 +6,25 @@
       { 'dark': isDark },
       { 'highlighted': isHighlighted },
       { 'is-loading': isRefreshing },
-      { 'chart-enter': isNew }
+      { 'chart-enter': isNew },
+      { 'keyword-dimmed': shouldDimCard },
+      { 'keyword-highlighted': isKeywordHighlighted }
     ]" 
     class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 transition-all duration-300 cursor-pointer hover:shadow-lg hover:-translate-y-0.5"
     @click="handleCardClick"
   >
     <div class="flex justify-between items-center mb-3">
       <div class="flex items-center gap-2">
-        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">{{ title }}</h3>
+        <h3 
+          :class="[
+            'text-sm font-semibold transition-all duration-300',
+            keywordMatch?.titleMatched ? 'text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-200',
+            keywordMatch?.titleMatched ? 'bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded' : ''
+          ]"
+        >
+          {{ title }}
+          <span v-if="keywordMatch?.titleMatched" class="ml-1 text-xs text-blue-500">🔍</span>
+        </h3>
         <span 
           v-if="alertCount && alertCount > 0" 
           class="px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full font-medium"
@@ -26,6 +37,23 @@
         >
           自定义
         </span>
+        <Transition name="fade">
+          <span 
+            v-if="isKeywordHighlighted && matchedItemsCount > 0" 
+            class="px-2 py-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-xs rounded-full font-medium flex items-center gap-1"
+          >
+            <span>✨</span>
+            <span>{{ matchedItemsCount }} 处匹配</span>
+          </span>
+        </Transition>
+        <Transition name="fade">
+          <span 
+            v-if="shouldDimCard" 
+            class="px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs rounded-full font-medium"
+          >
+            无匹配
+          </span>
+        </Transition>
       </div>
       <div class="flex gap-2">
         <button 
@@ -146,6 +174,14 @@ const props = defineProps<{
   isCustom?: boolean;
   isNew?: boolean;
   chartType?: 'line' | 'bar' | 'pie' | 'scatter' | 'heatmap';
+  keywordMatch?: {
+    hasAnyMatch: boolean;
+    titleMatched: boolean;
+    legendMatches: { name: string; matched: boolean }[];
+    categoryMatches: { name: string; matched: boolean }[];
+  } | null;
+  keywordActive?: boolean;
+  hasAnyKeywordMatch?: boolean;
 }>();
 
 const emit = defineEmits(['refresh', 'remove', 'animationEnd', 'click']);
@@ -173,10 +209,145 @@ const isTrendChart = computed(() => {
   return props.chartType === 'line' || props.chartType === 'bar';
 });
 
+const shouldDimCard = computed(() => {
+  return props.keywordActive && props.hasAnyKeywordMatch && props.keywordMatch && !props.keywordMatch.hasAnyMatch;
+});
+
+const isKeywordHighlighted = computed(() => {
+  return props.keywordActive && props.keywordMatch?.hasAnyMatch;
+});
+
+const matchedItemsCount = computed(() => {
+  if (!props.keywordMatch) return 0;
+  let count = 0;
+  if (props.keywordMatch.titleMatched) count++;
+  count += props.keywordMatch.legendMatches.filter(m => m.matched).length;
+  count += props.keywordMatch.categoryMatches.filter(m => m.matched).length;
+  return count;
+});
+
 const currentChartOption = computed(() => {
   if (activeChartOption.value) {
     return activeChartOption.value;
   }
+  
+  if (props.keywordActive && props.keywordMatch) {
+    const option = JSON.parse(JSON.stringify(props.chartOption));
+    const match = props.keywordMatch;
+    
+    if (option.legend && option.legend.data) {
+      option.legend.selected = option.legend.selected || {};
+      option.legend.data.forEach((name: string) => {
+        const itemMatch = match.legendMatches.find((m: any) => m.name === name);
+        const matched = itemMatch?.matched || match.titleMatched;
+        option.legend.selected[name] = matched || !props.hasAnyKeywordMatch;
+      });
+      
+      option.legend.textStyle = option.legend.textStyle || {};
+      option.legend.data = option.legend.data.map((name: string) => {
+        const itemMatch = match.legendMatches.find((m: any) => m.name === name);
+        const matched = itemMatch?.matched || match.titleMatched;
+        const shouldHighlight = props.hasAnyKeywordMatch ? matched : true;
+        
+        return {
+          name,
+          textStyle: shouldHighlight ? {
+            fontWeight: 'bold' as const,
+            color: '#3b82f6'
+          } : {
+            color: '#9ca3af',
+            textDecoration: 'line-through' as const
+          }
+        };
+      });
+    }
+    
+    if (option.series && Array.isArray(option.series)) {
+      option.series = option.series.map((series: any) => {
+        const seriesName = series.name || '';
+        const seriesMatched = seriesName.toLowerCase().includes((match as any)._keyword?.toLowerCase() || '') || match.titleMatched;
+        
+        if (series.data && Array.isArray(series.data)) {
+          series.data = series.data.map((item: any, dataIndex: number) => {
+            let itemName = '';
+
+            if (typeof item === 'object' && item !== null) {
+              itemName = item.name || '';
+            } else if (option.xAxis?.data && option.xAxis.data[dataIndex]) {
+              itemName = option.xAxis.data[dataIndex];
+            }
+
+            const categoryMatch = match.categoryMatches.find((m: any) => m.name === itemName);
+            const itemMatched = categoryMatch?.matched || seriesMatched;
+
+            const shouldHighlight = props.hasAnyKeywordMatch 
+              ? itemMatched 
+              : true;
+
+            if (typeof item === 'object' && item !== null) {
+              return {
+                ...item,
+                itemStyle: shouldHighlight ? {
+                  ...item.itemStyle,
+                  opacity: 1,
+                  shadowBlur: 15,
+                  shadowColor: 'rgba(59, 130, 246, 0.8)'
+                } : {
+                  ...item.itemStyle,
+                  opacity: 0.25
+                },
+                label: item.label && shouldHighlight ? {
+                  ...item.label,
+                  fontWeight: 'bold' as const,
+                  color: '#3b82f6',
+                  fontSize: 14
+                } : item.label
+              };
+            } else {
+              return {
+                value: item,
+                itemStyle: shouldHighlight ? {
+                  opacity: 1,
+                  shadowBlur: 15,
+                  shadowColor: 'rgba(59, 130, 246, 0.8)'
+                } : {
+                  opacity: 0.25
+                }
+              };
+            }
+          });
+        }
+
+        if (series.type === 'pie') {
+          const shouldHighlight = props.hasAnyKeywordMatch 
+            ? seriesMatched 
+            : true;
+          series.itemStyle = shouldHighlight ? {
+            ...series.itemStyle,
+            opacity: 1,
+            shadowBlur: 15,
+            shadowColor: 'rgba(59, 130, 246, 0.8)'
+          } : {
+            ...series.itemStyle,
+            opacity: 0.25
+          };
+          series.label = shouldHighlight ? {
+            ...series.label,
+            fontWeight: 'bold' as const,
+            color: '#3b82f6'
+          } : {
+            ...series.label,
+            opacity: 0.5
+          };
+        }
+
+        return series;
+      });
+    }
+    
+    return option;
+  }
+  
   return props.chartOption;
 });
 
@@ -368,5 +539,41 @@ onUnmounted(() => {
 .replay-slide-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+.chart-card.keyword-dimmed {
+  opacity: 0.4;
+  filter: grayscale(0.8);
+  transform: scale(0.98);
+  pointer-events: none;
+}
+
+.chart-card.keyword-highlighted {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5), 0 10px 40px rgba(59, 130, 246, 0.2);
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  position: relative;
+  z-index: 10;
+}
+
+.chart-card.keyword-highlighted::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(99, 102, 241, 0.1));
+  z-index: -1;
+  animation: keyword-glow 2s ease-in-out infinite;
+}
+
+@keyframes keyword-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.5);
+  }
 }
 </style>

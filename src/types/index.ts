@@ -235,6 +235,37 @@ export interface TrendReplayData {
   series: TrendReplaySeriesData[];
 }
 
+export interface KeywordMatchItem {
+  name: string;
+  matched: boolean;
+  highlightColor?: string;
+}
+
+export interface ChartKeywordMatch {
+  chartId: string;
+  titleMatched: boolean;
+  legendMatches: KeywordMatchItem[];
+  categoryMatches: KeywordMatchItem[];
+  seriesMatches: KeywordMatchItem[];
+  hasAnyMatch: boolean;
+}
+
+export interface OverviewKeywordMatch {
+  metricName: string;
+  matched: boolean;
+}
+
+export interface KeywordMatchResult {
+  hasActiveFilter: boolean;
+  hasAnyMatch: boolean;
+  totalMatches: number;
+  totalItems: number;
+  chartMatches: ChartKeywordMatch[];
+  overviewMatches: OverviewKeywordMatch[];
+  matchedChartIds: string[];
+  noMatchReason?: string;
+}
+
 export interface DashboardScheme {
   id: string;
   name: string;

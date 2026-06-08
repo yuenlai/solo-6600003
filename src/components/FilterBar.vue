@@ -221,10 +221,70 @@
     <div class="other-filters flex items-start gap-4 flex-wrap pt-3 border-t border-gray-200 dark:border-gray-700">
       <div v-for="filter in otherFilters" :key="filter.id" class="flex items-center gap-2">
         <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ filter.label }}:</label>
-        <input v-if="filter.type === 'text'" :value="filter.value" type="text"
-          @input="handleTextFilterInput(filter.id, $event)"
-          :placeholder="filter.label"
-          class="text-sm border rounded px-2 py-1 w-40 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+        <div v-if="filter.type === 'text'" class="keyword-filter-wrapper relative">
+          <div class="flex items-center gap-2">
+            <input 
+              :value="localKeywordInput" 
+              type="text"
+              @input="handleLocalKeywordInput($event)"
+              :placeholder="filter.label"
+              :class="[
+                'text-sm border rounded px-2 py-1 w-48 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-all duration-200 pr-20',
+                keywordMatchResult.hasActiveFilter && !keywordMatchResult.hasAnyMatch ? 'border-red-400 dark:border-red-500 bg-red-50 dark:bg-red-900/20' : '',
+                keywordMatchResult.hasActiveFilter && keywordMatchResult.hasAnyMatch ? 'border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20' : ''
+              ]"
+            />
+            <Transition name="fade">
+              <span v-if="keywordMatchResult.hasActiveFilter" class="keyword-match-status absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <span v-if="keywordMatchResult.hasAnyMatch" class="text-xs text-green-600 dark:text-green-400 font-medium">
+                  ✅ {{ keywordMatchResult.totalMatches }} 个匹配
+                </span>
+                <span v-else class="text-xs text-red-600 dark:text-red-400 font-medium">
+                  ❌ 无匹配
+                </span>
+              </span>
+            </Transition>
+          </div>
+          <Transition name="slide-down">
+            <div v-if="keywordMatchResult.hasActiveFilter && !keywordMatchResult.hasAnyMatch" 
+              class="keyword-no-match-hint mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <div class="flex items-start gap-2">
+                <span class="text-red-500">🔍</span>
+                <div class="flex-1">
+                  <p class="text-sm text-red-700 dark:text-red-300 font-medium">
+                    {{ keywordMatchResult.noMatchReason }}
+                  </p>
+                  <p class="text-xs text-red-600 dark:text-red-400 mt-1">
+                    提示：请尝试使用更宽泛的关键词，或检查拼写是否正确
+                  </p>
+                  <button 
+                    @click="handleClearKeywordFilter"
+                    class="mt-2 text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 underline"
+                  >
+                    清除关键词筛选
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Transition>
+          <Transition name="slide-down">
+            <div v-if="keywordMatchResult.hasActiveFilter && keywordMatchResult.hasAnyMatch" 
+              class="keyword-match-hint mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div class="flex items-start gap-2">
+                <span class="text-blue-500">✨</span>
+                <div class="flex-1">
+                  <p class="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                    已在 <span class="font-bold">{{ keywordMatchResult.matchedChartIds.length }}</span> 个图表中找到 
+                    <span class="font-bold">{{ keywordMatchResult.totalMatches }}</span> 处匹配
+                  </p>
+                  <p class="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    匹配范围：图表标题、图例、分类名称、数据系列
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Transition>
+        </div>
         <div v-else-if="filter.type === 'date-range'" class="date-range-picker">
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-2">
@@ -291,7 +351,8 @@ const {
   compareMode, 
   compareModeLoading, 
   allActiveFilters, 
-  filterHitScope 
+  filterHitScope,
+  keywordMatchResult 
 } = storeToRefs(store);
 
 interface QuickDateOption {
@@ -313,6 +374,20 @@ const startDateInput = ref<HTMLInputElement | null>(null);
 const endDateInput = ref<HTMLInputElement | null>(null);
 const debounceTimer = ref<{ [key: string]: ReturnType<typeof setTimeout> }>({});
 const pendingDateValues = ref<{ [key: string]: string[] }>({});
+const localKeywordInput = ref('');
+const keywordFilterId = computed(() => {
+  const filter = dashboard.value.filters.find(f => f.field === 'keyword');
+  return filter?.id || '';
+});
+
+watch(() => {
+  const filter = dashboard.value.filters.find(f => f.field === 'keyword');
+  return filter?.value || '';
+}, (newVal) => {
+  if (newVal !== localKeywordInput.value) {
+    localKeywordInput.value = newVal || '';
+  }
+}, { immediate: true });
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -700,9 +775,26 @@ function handleClearAllFilters() {
   store.clearAllFilters();
 }
 
-function handleTextFilterInput(filterId: string, event: Event) {
+function handleLocalKeywordInput(event: Event) {
   const target = event.target as HTMLInputElement;
-  store.updateFilter(filterId, target.value);
+  localKeywordInput.value = target.value;
+  
+  if (debounceTimer.value['keyword']) {
+    clearTimeout(debounceTimer.value['keyword']);
+  }
+  
+  debounceTimer.value['keyword'] = setTimeout(() => {
+    store.updateFilter(keywordFilterId.value, target.value);
+  }, 200);
+}
+
+function handleClearKeywordFilter() {
+  localKeywordInput.value = '';
+  if (debounceTimer.value['keyword']) {
+    clearTimeout(debounceTimer.value['keyword']);
+    delete debounceTimer.value['keyword'];
+  }
+  store.clearFilter(keywordFilterId.value);
 }
 
 function getRegionIcon(region: string): string {
@@ -820,5 +912,19 @@ watch(() => dashboard.value.filters, (newFilters) => {
 
 .tag-move {
   transition: transform 0.3s ease;
+}
+
+.keyword-filter-wrapper input:focus {
+  outline: none;
+  ring: 2px;
+  ring-color: rgba(59, 130, 246, 0.5);
+}
+
+.keyword-filter-wrapper input::placeholder {
+  color: #9ca3af;
+}
+
+.keyword-match-status {
+  pointer-events: none;
 }
 </style>

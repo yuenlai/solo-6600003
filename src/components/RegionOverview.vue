@@ -12,10 +12,19 @@
     </div>
     
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div class="metric-card bg-white/10 backdrop-blur-sm rounded-lg p-4 hover:bg-white/15 transition-colors">
+      <div 
+        :class="[
+          'metric-card bg-white/10 backdrop-blur-sm rounded-lg p-4 hover:bg-white/15 transition-all duration-300',
+          { 'metric-highlighted': isMetricMatched('总销售额') },
+          { 'metric-dimmed': shouldDimMetric('总销售额') }
+        ]"
+      >
         <div class="flex items-center gap-2 mb-2">
           <span class="text-xl">💰</span>
-          <span class="text-primary-100 text-sm">总销售额</span>
+          <span :class="['text-primary-100 text-sm transition-all', isMetricMatched('总销售额') ? 'font-bold text-yellow-200' : '']">
+            总销售额
+            <span v-if="isMetricMatched('总销售额')" class="ml-1">🔍</span>
+          </span>
         </div>
         <div class="text-2xl font-bold mb-1">¥{{ formatLargeNumber(overview.totalSales) }}</div>
         <div :class="['text-sm font-medium flex items-center gap-1', overview.salesGrowth >= 0 ? 'text-green-300' : 'text-red-300']">
@@ -25,10 +34,19 @@
         </div>
       </div>
 
-      <div class="metric-card bg-white/10 backdrop-blur-sm rounded-lg p-4 hover:bg-white/15 transition-colors">
+      <div 
+        :class="[
+          'metric-card bg-white/10 backdrop-blur-sm rounded-lg p-4 hover:bg-white/15 transition-all duration-300',
+          { 'metric-highlighted': isMetricMatched('订单量') },
+          { 'metric-dimmed': shouldDimMetric('订单量') }
+        ]"
+      >
         <div class="flex items-center gap-2 mb-2">
           <span class="text-xl">📦</span>
-          <span class="text-primary-100 text-sm">订单量</span>
+          <span :class="['text-primary-100 text-sm transition-all', isMetricMatched('订单量') ? 'font-bold text-yellow-200' : '']">
+            订单量
+            <span v-if="isMetricMatched('订单量')" class="ml-1">🔍</span>
+          </span>
         </div>
         <div class="text-2xl font-bold mb-1">{{ formatLargeNumber(overview.orderCount) }}</div>
         <div :class="['text-sm font-medium flex items-center gap-1', overview.orderGrowth >= 0 ? 'text-green-300' : 'text-red-300']">
@@ -38,10 +56,19 @@
         </div>
       </div>
 
-      <div class="metric-card bg-white/10 backdrop-blur-sm rounded-lg p-4 hover:bg-white/15 transition-colors">
+      <div 
+        :class="[
+          'metric-card bg-white/10 backdrop-blur-sm rounded-lg p-4 hover:bg-white/15 transition-all duration-300',
+          { 'metric-highlighted': isMetricMatched('客单价') },
+          { 'metric-dimmed': shouldDimMetric('客单价') }
+        ]"
+      >
         <div class="flex items-center gap-2 mb-2">
           <span class="text-xl">💎</span>
-          <span class="text-primary-100 text-sm">客单价</span>
+          <span :class="['text-primary-100 text-sm transition-all', isMetricMatched('客单价') ? 'font-bold text-yellow-200' : '']">
+            客单价
+            <span v-if="isMetricMatched('客单价')" class="ml-1">🔍</span>
+          </span>
         </div>
         <div class="text-2xl font-bold mb-1">¥{{ overview.avgOrderValue.toLocaleString() }}</div>
         <div :class="['text-sm font-medium flex items-center gap-1', overview.avgOrderGrowth >= 0 ? 'text-green-300' : 'text-red-300']">
@@ -51,10 +78,19 @@
         </div>
       </div>
 
-      <div class="metric-card bg-white/10 backdrop-blur-sm rounded-lg p-4 hover:bg-white/15 transition-colors">
+      <div 
+        :class="[
+          'metric-card bg-white/10 backdrop-blur-sm rounded-lg p-4 hover:bg-white/15 transition-all duration-300',
+          { 'metric-highlighted': isMetricMatched('客户数') },
+          { 'metric-dimmed': shouldDimMetric('客户数') }
+        ]"
+      >
         <div class="flex items-center gap-2 mb-2">
           <span class="text-xl">👥</span>
-          <span class="text-primary-100 text-sm">客户数</span>
+          <span :class="['text-primary-100 text-sm transition-all', isMetricMatched('客户数') ? 'font-bold text-yellow-200' : '']">
+            客户数
+            <span v-if="isMetricMatched('客户数')" class="ml-1">🔍</span>
+          </span>
         </div>
         <div class="text-2xl font-bold mb-1">{{ formatLargeNumber(overview.customerCount) }}</div>
         <div :class="['text-sm font-medium flex items-center gap-1', overview.customerGrowth >= 0 ? 'text-green-300' : 'text-red-300']">
@@ -71,11 +107,25 @@
 import { computed } from 'vue';
 import type { RegionOverview } from '../types';
 
-defineProps<{
+const props = defineProps<{
   overview: RegionOverview;
+  keywordMatches?: { metricName: string; matched: boolean }[];
+  keywordActive?: boolean;
+  hasAnyKeywordMatch?: boolean;
 }>();
 
 defineEmits(['refresh']);
+
+function isMetricMatched(metricName: string): boolean {
+  if (!props.keywordActive || !props.keywordMatches) return false;
+  const match = props.keywordMatches.find(m => m.metricName === metricName);
+  return match?.matched || false;
+}
+
+function shouldDimMetric(metricName: string): boolean {
+  if (!props.keywordActive || !props.hasAnyKeywordMatch) return false;
+  return !isMetricMatched(metricName);
+}
 
 const updateTime = computed(() => {
   const now = new Date();
@@ -110,5 +160,28 @@ function formatGrowth(growth: number): string {
 
 .metric-card:hover {
   transform: translateY(-2px);
+}
+
+.metric-card.metric-highlighted {
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.3), rgba(245, 158, 11, 0.3));
+  border: 2px solid rgba(250, 204, 21, 0.6);
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.4);
+  transform: scale(1.02);
+  animation: metric-pulse 2s ease-in-out infinite;
+}
+
+.metric-card.metric-dimmed {
+  opacity: 0.4;
+  filter: grayscale(0.8);
+  transform: scale(0.98);
+}
+
+@keyframes metric-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(250, 204, 21, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(250, 204, 21, 0.6);
+  }
 }
 </style>

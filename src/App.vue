@@ -30,6 +30,9 @@
           >
           <RegionOverview 
             :overview="regionOverview" 
+            :keyword-matches="keywordMatchResult.overviewMatches"
+            :keyword-active="keywordMatchResult.hasActiveFilter"
+            :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
             @refresh="handleRefreshOverview" 
           />
           
@@ -47,6 +50,9 @@
                   :is-dark="isDark"
                   :is-highlighted="highlightedChartId === salesTrendChart.id"
                   :alert-count="getChartAlertCount(salesTrendChart.id)"
+                  :keyword-match="getChartKeywordMatch(salesTrendChart.id)"
+                  :keyword-active="keywordMatchResult.hasActiveFilter"
+                  :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
                   @refresh="refreshChart(salesTrendChart.id)"
                   @remove="store.removeChart(salesTrendChart.id)"
                   @click="handleChartClick(salesTrendChart.id)"
@@ -62,6 +68,9 @@
                   :is-dark="isDark"
                   :is-highlighted="highlightedChartId === categoryChart.id"
                   :alert-count="getChartAlertCount(categoryChart.id)"
+                  :keyword-match="getChartKeywordMatch(categoryChart.id)"
+                  :keyword-active="keywordMatchResult.hasActiveFilter"
+                  :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
                   @refresh="refreshChart(categoryChart.id)"
                   @remove="store.removeChart(categoryChart.id)"
                   @click="handleChartClick(categoryChart.id)"
@@ -79,6 +88,9 @@
                   :is-dark="isDark"
                   :is-highlighted="highlightedChartId === marketShareChart.id"
                   :alert-count="getChartAlertCount(marketShareChart.id)"
+                  :keyword-match="getChartKeywordMatch(marketShareChart.id)"
+                  :keyword-active="keywordMatchResult.hasActiveFilter"
+                  :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
                   @refresh="refreshChart(marketShareChart.id)"
                   @remove="store.removeChart(marketShareChart.id)"
                   @click="handleChartClick(marketShareChart.id)"
@@ -107,6 +119,9 @@
                       :is-new="newChartIds.has(chart.id)"
                       :is-highlighted="highlightedChartId === chart.id"
                       :alert-count="getChartAlertCount(chart.id)"
+                      :keyword-match="getChartKeywordMatch(chart.id)"
+                      :keyword-active="keywordMatchResult.hasActiveFilter"
+                      :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
                       @refresh="refreshChart(chart.id)"
                       @remove="handleRemoveChart(chart.id)"
                       @animation-end="handleAnimationEnd(chart.id)"
@@ -159,7 +174,7 @@ import RegionCompareSkeleton from './components/RegionCompareSkeleton.vue';
 import ChartDetailDrawer from './components/ChartDetailDrawer.vue';
 
 const store = useDashboardStore();
-const { dashboard, isDark, regionOverview, alerts, highlightedChartId, compareMode, compareModeLoading, comparisonData, comparisonVersion, chartDetailDrawerVisible, chartDetailData, chartDetailLoading } = storeToRefs(store);
+const { dashboard, isDark, regionOverview, alerts, highlightedChartId, compareMode, compareModeLoading, comparisonData, comparisonVersion, chartDetailDrawerVisible, chartDetailData, chartDetailLoading, keywordMatchResult } = storeToRefs(store);
 
 watch(() => compareMode.value.enabled, (newVal) => {
   if (newVal) {
@@ -278,6 +293,11 @@ function handleRemoveChart(chartId: string) {
 
 function getChartAlertCount(chartId: string): number {
   return alerts.value.filter(a => a.chartId === chartId && !a.isRead).length;
+}
+
+function getChartKeywordMatch(chartId: string) {
+  if (!keywordMatchResult.value.hasActiveFilter) return null;
+  return keywordMatchResult.value.chartMatches.find(m => m.chartId === chartId) || null;
 }
 
 function handleLocateToChart(chartId: string) {

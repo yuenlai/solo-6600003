@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, nextTick, watch } from 'vue';
-import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName, DashboardScheme, FilterConfig, ChartDetailData } from '../types';
+import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName, DashboardScheme, FilterConfig, ChartDetailData, KeywordMatchResult, ChartKeywordMatch, KeywordMatchItem, OverviewKeywordMatch } from '../types';
 import { generateRegionData, generateAlerts, generateMockAlerts, generateScatterData, generateHeatmapData, generateChartDetailData } from '../mock/data';
 
 const SCHEMES_STORAGE_KEY = 'dashboard-schemes';
@@ -356,6 +356,242 @@ export const useDashboardStore = defineStore('dashboard', () => {
       totalCustomers: overview.customerCount
     };
   });
+
+  function normalizeText(text: string): string {
+    return text.toLowerCase().trim();
+  }
+
+  function isTextMatch(text: string, keyword: string): boolean {
+    if (!keyword || !keyword.trim()) return false;
+    const normalizedText = normalizeText(text);
+    const normalizedKeyword = normalizeText(keyword);
+    return normalizedText.includes(normalizedKeyword);
+  }
+
+  function createMatchItem(name: string, keyword: string, highlightColor?: string): KeywordMatchItem {
+    return {
+      name,
+      matched: isTextMatch(name, keyword),
+      highlightColor
+    };
+  }
+
+  const currentKeyword = computed(() => {
+    const filter = dashboard.value.filters.find(f => f.field === 'keyword');
+    return filter ? (filter.value as string) || '' : '';
+  });
+
+  const OVERVIEW_METRICS = [
+    { metricName: '总销售额', icon: '💰' },
+    { metricName: '订单量', icon: '📦' },
+    { metricName: '客单价', icon: '💎' },
+    { metricName: '客户数', icon: '👥' }
+  ];
+
+  const keywordMatchResult = computed<KeywordMatchResult>(() => {
+    const keyword = currentKeyword.value;
+    const hasActiveFilter = !!keyword && keyword.trim() !== '';
+
+    if (!hasActiveFilter) {
+      return {
+        hasActiveFilter: false,
+        hasAnyMatch: true,
+        totalMatches: 0,
+        totalItems: 0,
+        chartMatches: [],
+        overviewMatches: [],
+        matchedChartIds: []
+      };
+    }
+
+    let totalMatches = 0;
+    let totalItems = 0;
+    const matchedChartIds: string[] = [];
+
+    const overviewMatches: OverviewKeywordMatch[] = OVERVIEW_METRICS.map(m => {
+      const matched = isTextMatch(m.metricName, keyword);
+      totalItems++;
+      if (matched) totalMatches++;
+      return { metricName: m.metricName, matched };
+    });
+
+    const chartMatches: ChartKeywordMatch[] = dashboard.value.charts.map(chart => {
+      const titleMatched = isTextMatch(chart.title, keyword);
+      totalItems++;
+      if (titleMatched) totalMatches++;
+
+      const legendData = chart.option.legend?.data || [];
+      const legendMatches: KeywordMatchItem[] = legendData.map((name: string) => {
+        const match = createMatchItem(name, keyword);
+        totalItems++;
+        if (match.matched) totalMatches++;
+        return match;
+      });
+
+      let categoryMatches: KeywordMatchItem[] = [];
+      const xAxisData = chart.option.xAxis?.data;
+      if (xAxisData && Array.isArray(xAxisData)) {
+        categoryMatches = xAxisData.map((name: string) => {
+          const match = createMatchItem(name, keyword);
+          totalItems++;
+          if (match.matched) totalMatches++;
+          return match;
+        });
+      }
+
+      let seriesMatches: KeywordMatchItem[] = [];
+      const series = chart.option.series;
+      if (series && Array.isArray(series)) {
+        series.forEach((s: any) => {
+          if (s.data && Array.isArray(s.data)) {
+            s.data.forEach((item: any) => {
+              let name = '';
+              if (typeof item === 'object' && item !== null && item.name) {
+                name = item.name;
+              }
+              if (name) {
+                const match = createMatchItem(name, keyword);
+                totalItems++;
+                if (match.matched) totalMatches++;
+                seriesMatches.push(match);
+              }
+            });
+          }
+        });
+      }
+
+      const hasAnyMatch = titleMatched 
+        || legendMatches.some(m => m.matched)
+        || categoryMatches.some(m => m.matched)
+        || seriesMatches.some(m => m.matched);
+
+      if (hasAnyMatch) {
+        matchedChartIds.push(chart.id);
+      }
+
+      return {
+        chartId: chart.id,
+        titleMatched,
+        legendMatches,
+        categoryMatches,
+        seriesMatches,
+        hasAnyMatch
+      };
+    });
+
+    const hasAnyMatch = totalMatches > 0;
+
+    return {
+      hasActiveFilter: true,
+      hasAnyMatch,
+      totalMatches,
+      totalItems,
+      chartMatches,
+      overviewMatches,
+      matchedChartIds,
+      noMatchReason: hasAnyMatch ? undefined : `未找到包含"${keyword}"的匹配结果`
+    };
+  });
+
+  function getChartMatch(chartId: string): ChartKeywordMatch | undefined {
+    return keywordMatchResult.value.chartMatches.find(m => m.chartId === chartId);
+  }
+
+  function getHighlightedChartOption(chartId: string, baseOption: Record<string, any>): Record<string, any> {
+    const match = getChartMatch(chartId);
+    if (!match || !keywordMatchResult.value.hasActiveFilter) {
+      return baseOption;
+    }
+
+    const option = JSON.parse(JSON.stringify(baseOption));
+    const keyword = currentKeyword.value;
+
+    if (option.legend && option.legend.data) {
+      option.legend.selected = option.legend.selected || {};
+      option.legend.data.forEach((name: string) => {
+        const itemMatch = match.legendMatches.find(m => m.name === name);
+        const matched = itemMatch?.matched || match.titleMatched;
+        option.legend.selected[name] = matched || !keywordMatchResult.value.hasAnyMatch;
+      });
+    }
+
+    if (option.series && Array.isArray(option.series)) {
+      option.series = option.series.map((series: any) => {
+        const seriesName = series.name || '';
+        const seriesMatched = isTextMatch(seriesName, keyword) || match.titleMatched;
+
+        if (series.data && Array.isArray(series.data)) {
+          series.data = series.data.map((item: any, dataIndex: number) => {
+            let itemName = '';
+
+            if (typeof item === 'object' && item !== null) {
+              itemName = item.name || '';
+            } else if (option.xAxis?.data && option.xAxis.data[dataIndex]) {
+              itemName = option.xAxis.data[dataIndex];
+            }
+
+            const categoryMatch = match.categoryMatches.find(m => m.name === itemName);
+            const seriesItemMatch = match.seriesMatches.find(m => m.name === itemName);
+            const itemMatched = categoryMatch?.matched || seriesItemMatch?.matched || seriesMatched;
+
+            const shouldHighlight = keywordMatchResult.value.hasAnyMatch 
+              ? itemMatched 
+              : true;
+
+            if (typeof item === 'object' && item !== null) {
+              return {
+                ...item,
+                itemStyle: shouldHighlight ? {
+                  ...item.itemStyle,
+                  opacity: 1,
+                  shadowBlur: 10,
+                  shadowColor: 'rgba(59, 130, 246, 0.8)'
+                } : {
+                  ...item.itemStyle,
+                  opacity: 0.2
+                },
+                label: item.label && shouldHighlight ? {
+                  ...item.label,
+                  fontWeight: 'bold',
+                  color: '#3b82f6'
+                } : item.label
+              };
+            } else {
+              return {
+                value: item,
+                itemStyle: shouldHighlight ? {
+                  opacity: 1,
+                  shadowBlur: 10,
+                  shadowColor: 'rgba(59, 130, 246, 0.8)'
+                } : {
+                  opacity: 0.2
+                }
+              };
+            }
+          });
+        }
+
+        if (series.type === 'pie') {
+          const shouldHighlight = keywordMatchResult.value.hasAnyMatch 
+            ? seriesMatched 
+            : true;
+          series.itemStyle = shouldHighlight ? {
+            ...series.itemStyle,
+            opacity: 1,
+            shadowBlur: 10,
+            shadowColor: 'rgba(59, 130, 246, 0.8)'
+          } : {
+            ...series.itemStyle,
+            opacity: 0.2
+          };
+        }
+
+        return series;
+      });
+    }
+
+    return option;
+  }
 
   const currentRegionData = computed(() => {
     const region = currentRegion.value;
@@ -1275,6 +1511,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     compareMode, compareModeLoading, comparisonData, comparisonVersion, regionDataA, regionDataB,
     schemes, currentSchemeId, currentScheme, schemeLoading,
     activeFilters, activeFiltersCount, compareModeActiveFilters, allActiveFilters, filterHitScope,
+    currentKeyword, keywordMatchResult,
     saveScheme, applyScheme, deleteScheme, renameScheme, checkSchemeNameExists, clearCurrentScheme,
     toggleTheme, updateFilter, clearFilter, clearAllFilters, updateChartGrid, addChart, removeChart, updateChartData,
     refreshRegionData, updateChartsForRegion,
@@ -1282,6 +1519,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     dismissAlert, clearAllAlerts, setHighlightedChart, toggleAlertAutoRefresh,
     openChartDetail, closeChartDetail, refreshChartDetail,
     addCustomChart, refreshCustomChart, generateChartOption,
-    toggleCompareMode, setCompareRegion, refreshComparisonData, ensureCompareDataLoaded
+    toggleCompareMode, setCompareRegion, refreshComparisonData, ensureCompareDataLoaded,
+    getChartMatch, getHighlightedChartOption, isTextMatch
   };
 });
