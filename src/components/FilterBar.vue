@@ -229,17 +229,21 @@
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-2">
               <input
+                ref="startDateInput"
                 type="date"
                 :value="getDateRangeValue(filter.id, 0)"
-                @change="handleStartDateChange(filter.id, $event)"
+                @input="handleStartDateInput(filter.id, $event)"
+                @blur="handleStartDateBlur(filter.id, $event)"
                 :max="getDateRangeValue(filter.id, 1) || ''"
                 class="text-sm border rounded px-2 py-1 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
               <span class="text-gray-400 dark:text-gray-500">至</span>
               <input
+                ref="endDateInput"
                 type="date"
                 :value="getDateRangeValue(filter.id, 1)"
-                @change="handleEndDateChange(filter.id, $event)"
+                @input="handleEndDateInput(filter.id, $event)"
+                @blur="handleEndDateBlur(filter.id, $event)"
                 :min="getDateRangeValue(filter.id, 0) || ''"
                 class="text-sm border rounded px-2 py-1 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
@@ -303,7 +307,27 @@ const quickDateOptions: QuickDateOption[] = [
   { label: '上月', days: -1 }
 ];
 
-const activeQuickDate = ref<Record<string, string>>({});
+const activeQuickDate = ref<{ [key: string]: string }>({});
+
+const startDateInput = ref<HTMLInputElement | null>(null);
+const endDateInput = ref<HTMLInputElement | null>(null);
+const debounceTimer = ref<{ [key: string]: ReturnType<typeof setTimeout> }>({});
+const pendingDateValues = ref<{ [key: string]: string[] }>({});
+
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidDateString(dateStr: string): boolean {
+  if (!dateStr) return true;
+  if (!DATE_REGEX.test(dateStr)) return false;
+  const date = new Date(dateStr);
+  return date instanceof Date && !isNaN(date.getTime());
+}
+
+function isValidDateRange(start: string, end: string): boolean {
+  if (!start || !end) return false;
+  if (!DATE_REGEX.test(start) || !DATE_REGEX.test(end)) return false;
+  return start <= end;
+}
 
 function formatDate(date: Date): string {
   const year = date.getFullYear();
@@ -333,67 +357,244 @@ function getDateRangeArray(filterId: string): string[] {
   return ['', ''];
 }
 
-function handleStartDateChange(filterId: string, event: Event) {
-  const target = event.target as HTMLInputElement;
-  const currentRange = getDateRangeArray(filterId);
-  let endDate = currentRange[1];
-  
-  if (!target.value) {
-    const newRange = ['', endDate];
-    activeQuickDate.value[filterId] = '';
-    store.updateFilter(filterId, newRange);
-    return;
+function debounceUpdateFilter(filterId: string, value: string[], delay: number = 300) {
+  if (debounceTimer.value[filterId]) {
+    clearTimeout(debounceTimer.value[filterId]);
   }
   
-  if (!endDate) {
-    const start = new Date(target.value);
-    const defaultEnd = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const today = new Date();
-    endDate = formatDate(defaultEnd > today ? today : defaultEnd);
-  }
-  
-  if (target.value > endDate) {
-    target.value = endDate;
-  }
-  
-  const newRange = [target.value, endDate];
-  activeQuickDate.value[filterId] = '';
-  store.updateFilter(filterId, newRange);
+  debounceTimer.value[filterId] = setTimeout(() => {
+    store.updateFilter(filterId, value);
+  }, delay);
 }
 
-function handleEndDateChange(filterId: string, event: Event) {
+function buildValidDateRange(
+  _filterId: string, 
+  startValue: string, 
+  endValue: string
+): { newRange: string[]; shouldUpdate: boolean; isCompletelyEmpty: boolean; isPartialInput: boolean } {
+  const isStartValid = isValidDateString(startValue);
+  const isEndValid = isValidDateString(endValue);
+  
+  const isCompletelyEmpty = !startValue && !endValue;
+  const isPartialInput: boolean = !!(startValue && !isStartValid) || !!(endValue && !isEndValid);
+  
+  if (isPartialInput) {
+    return { newRange: [startValue, endValue], shouldUpdate: false, isCompletelyEmpty, isPartialInput };
+  }
+  
+  let newStart = startValue;
+  let newEnd = endValue;
+  
+  if (startValue && !endValue) {
+    const start = new Date(startValue);
+    const defaultEnd = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const today = new Date();
+    newEnd = formatDate(defaultEnd > today ? today : defaultEnd);
+  } else if (!startValue && endValue) {
+    const end = new Date(endValue);
+    const defaultStart = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    newStart = formatDate(defaultStart);
+  }
+  
+  if (newStart && newEnd && newStart > newEnd) {
+    newEnd = newStart;
+  }
+  
+  const shouldUpdate = isCompletelyEmpty || (isValidDateRange(newStart, newEnd));
+  
+  return { newRange: [newStart, newEnd], shouldUpdate, isCompletelyEmpty, isPartialInput };
+}
+
+function handleStartDateInput(filterId: string, event: Event) {
   const target = event.target as HTMLInputElement;
   const currentRange = getDateRangeArray(filterId);
-  let startDate = currentRange[0];
+  const endDate = currentRange[1];
   
-  if (!target.value) {
-    const newRange = [startDate, ''];
-    activeQuickDate.value[filterId] = '';
+  const { newRange, shouldUpdate, isCompletelyEmpty, isPartialInput } = buildValidDateRange(
+    filterId,
+    target.value,
+    endDate
+  );
+  
+  activeQuickDate.value[filterId] = '';
+  
+  if (isCompletelyEmpty) {
+    if (debounceTimer.value[filterId]) {
+      clearTimeout(debounceTimer.value[filterId]);
+      delete debounceTimer.value[filterId];
+    }
     store.updateFilter(filterId, newRange);
     return;
   }
   
-  if (!startDate) {
-    const end = new Date(target.value);
-    const defaultStart = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
-    startDate = formatDate(defaultStart);
+  if (isPartialInput) {
+    pendingDateValues.value[filterId] = newRange;
+    return;
   }
   
-  if (target.value < startDate) {
-    target.value = startDate;
+  if (shouldUpdate) {
+    if (newRange[1] && newRange[1] !== endDate) {
+      target.value = newRange[0];
+      if (endDateInput.value) {
+        endDateInput.value.value = newRange[1];
+      }
+    }
+    debounceUpdateFilter(filterId, newRange, 100);
+  } else {
+    pendingDateValues.value[filterId] = newRange;
+  }
+}
+
+function handleStartDateBlur(filterId: string, event: Event) {
+  const target = event.target as HTMLInputElement;
+  const currentRange = getDateRangeArray(filterId);
+  const endDate = currentRange[1];
+  
+  if (debounceTimer.value[filterId]) {
+    clearTimeout(debounceTimer.value[filterId]);
+    delete debounceTimer.value[filterId];
   }
   
-  const newRange = [startDate, target.value];
+  const pending = pendingDateValues.value[filterId];
+  const inputValue = pending ? pending[0] : target.value;
+  
+  const { newRange, shouldUpdate, isCompletelyEmpty, isPartialInput } = buildValidDateRange(
+    filterId,
+    inputValue,
+    endDate
+  );
+  
   activeQuickDate.value[filterId] = '';
-  store.updateFilter(filterId, newRange);
+  
+  if (isPartialInput) {
+    target.value = currentRange[0] || '';
+    delete pendingDateValues.value[filterId];
+    return;
+  }
+  
+  if (shouldUpdate || isCompletelyEmpty) {
+    if (newRange[0] && newRange[1] && newRange[0] <= newRange[1]) {
+      target.value = newRange[0];
+      if (endDateInput.value) {
+        endDateInput.value.value = newRange[1];
+      }
+    }
+    store.updateFilter(filterId, newRange);
+    delete pendingDateValues.value[filterId];
+  } else {
+    target.value = currentRange[0] || '';
+    delete pendingDateValues.value[filterId];
+  }
+}
+
+function handleEndDateInput(filterId: string, event: Event) {
+  const target = event.target as HTMLInputElement;
+  const currentRange = getDateRangeArray(filterId);
+  const startDate = currentRange[0];
+  
+  const { newRange, shouldUpdate, isCompletelyEmpty, isPartialInput } = buildValidDateRange(
+    filterId,
+    startDate,
+    target.value
+  );
+  
+  activeQuickDate.value[filterId] = '';
+  
+  if (isCompletelyEmpty) {
+    if (debounceTimer.value[filterId]) {
+      clearTimeout(debounceTimer.value[filterId]);
+      delete debounceTimer.value[filterId];
+    }
+    store.updateFilter(filterId, newRange);
+    return;
+  }
+  
+  if (isPartialInput) {
+    pendingDateValues.value[filterId] = newRange;
+    return;
+  }
+  
+  if (shouldUpdate) {
+    if (newRange[0] && newRange[0] !== startDate) {
+      target.value = newRange[1];
+      if (startDateInput.value) {
+        startDateInput.value.value = newRange[0];
+      }
+    }
+    debounceUpdateFilter(filterId, newRange, 100);
+  } else {
+    pendingDateValues.value[filterId] = newRange;
+  }
+}
+
+function handleEndDateBlur(filterId: string, event: Event) {
+  const target = event.target as HTMLInputElement;
+  const currentRange = getDateRangeArray(filterId);
+  const startDate = currentRange[0];
+  
+  if (debounceTimer.value[filterId]) {
+    clearTimeout(debounceTimer.value[filterId]);
+    delete debounceTimer.value[filterId];
+  }
+  
+  const pending = pendingDateValues.value[filterId];
+  const inputValue = pending ? pending[1] : target.value;
+  
+  const { newRange, shouldUpdate, isCompletelyEmpty, isPartialInput } = buildValidDateRange(
+    filterId,
+    startDate,
+    inputValue
+  );
+  
+  activeQuickDate.value[filterId] = '';
+  
+  if (isPartialInput) {
+    target.value = currentRange[1] || '';
+    delete pendingDateValues.value[filterId];
+    return;
+  }
+  
+  if (shouldUpdate || isCompletelyEmpty) {
+    if (newRange[0] && newRange[1] && newRange[0] <= newRange[1]) {
+      target.value = newRange[1];
+      if (startDateInput.value) {
+        startDateInput.value.value = newRange[0];
+      }
+    }
+    store.updateFilter(filterId, newRange);
+    delete pendingDateValues.value[filterId];
+  } else {
+    target.value = currentRange[1] || '';
+    delete pendingDateValues.value[filterId];
+  }
 }
 
 function handleClearDateRange(filterId: string) {
   activeQuickDate.value[filterId] = '';
+  
+  if (debounceTimer.value[filterId]) {
+    clearTimeout(debounceTimer.value[filterId]);
+    delete debounceTimer.value[filterId];
+  }
+  delete pendingDateValues.value[filterId];
+  
+  if (startDateInput.value) {
+    startDateInput.value.value = '';
+  }
+  if (endDateInput.value) {
+    endDateInput.value.value = '';
+  }
+  
   store.clearFilter(filterId);
 }
 
 function handleQuickDateSelect(filterId: string, option: QuickDateOption) {
+  if (debounceTimer.value[filterId]) {
+    clearTimeout(debounceTimer.value[filterId]);
+    delete debounceTimer.value[filterId];
+  }
+  delete pendingDateValues.value[filterId];
+  
   const today = new Date();
   let startDate: Date;
   let endDate: Date;
@@ -411,6 +612,14 @@ function handleQuickDateSelect(filterId: string, option: QuickDateOption) {
   
   const newRange = [formatDate(startDate), formatDate(endDate)];
   activeQuickDate.value[filterId] = option.label;
+  
+  if (startDateInput.value) {
+    startDateInput.value.value = newRange[0];
+  }
+  if (endDateInput.value) {
+    endDateInput.value.value = newRange[1];
+  }
+  
   store.updateFilter(filterId, newRange);
 }
 
