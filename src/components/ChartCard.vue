@@ -122,21 +122,61 @@
     <Teleport to="body">
       <Transition name="fade">
         <div v-if="showDeleteConfirm" class="fixed inset-0 z-50 flex items-center justify-center">
-          <div class="absolute inset-0 bg-black/50" @click="showDeleteConfirm = false"></div>
-          <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm mx-4">
-            <h3 class="text-lg font-semibold text-gray-800 dark:text-white mb-2">确认删除</h3>
-            <p class="text-gray-600 dark:text-gray-300 mb-6">确定要删除图表「{{ title }}」吗？此操作无法撤销。</p>
+          <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showDeleteConfirm = false"></div>
+          <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-md mx-4 transform transition-all">
+            <div class="flex items-start gap-4 mb-4">
+              <div class="w-12 h-12 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center flex-shrink-0">
+                <span class="text-2xl">⚠️</span>
+              </div>
+              <div class="flex-1">
+                <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-1">确认删除图表</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">此操作将影响整个看板布局</p>
+              </div>
+            </div>
+            
+            <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
+              <h4 class="font-semibold text-red-700 dark:text-red-400 text-sm mb-2 flex items-center gap-2">
+                <span>🔴</span> 删除将产生以下影响：
+              </h4>
+              <ul class="space-y-2 text-sm text-red-600 dark:text-red-300">
+                <li class="flex items-start gap-2">
+                  <span class="text-red-400 mt-0.5">•</span>
+                  <span>图表「{{ title }}」将从看板中永久移除</span>
+                </li>
+                <li class="flex items-start gap-2">
+                  <span class="text-red-400 mt-0.5">•</span>
+                  <span>相关的告警规则和数据关联将失效</span>
+                </li>
+                <li class="flex items-start gap-2">
+                  <span class="text-red-400 mt-0.5">•</span>
+                  <span>整体布局会重新排列，下方卡片将上移</span>
+                </li>
+                <li v-if="alertCount && alertCount > 0" class="flex items-start gap-2">
+                  <span class="text-red-400 mt-0.5">•</span>
+                  <span class="font-medium">{{ alertCount }} 条相关告警将无法定位到此图表</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-6">
+              <p class="text-sm text-yellow-700 dark:text-yellow-400 flex items-start gap-2">
+                <span class="text-yellow-500 mt-0.5">💡</span>
+                <span>删除后 5 秒内可通过顶部提示撤销操作，超时后将无法恢复</span>
+              </p>
+            </div>
+            
             <div class="flex justify-end gap-3">
               <button 
                 @click.stop="showDeleteConfirm = false"
-                class="px-4 py-2 text-sm border rounded-lg hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 dark:text-gray-300"
+                class="px-5 py-2.5 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors"
               >
                 取消
               </button>
               <button 
                 @click.stop="confirmDelete"
-                class="px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600"
+                class="px-5 py-2.5 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 active:bg-red-700 transition-colors flex items-center gap-2 shadow-lg shadow-red-500/30"
               >
+                <span>🗑️</span>
                 确认删除
               </button>
             </div>

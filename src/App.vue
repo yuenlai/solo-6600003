@@ -41,60 +41,72 @@
           <div class="charts-container" ref="chartsContainer">
             <div class="chart-row">
               <div class="chart-item">
-                <ChartCard
+                <div 
                   v-if="salesTrendChart"
-                  :chart-id="salesTrendChart.id"
-                  :title="salesTrendChart.title"
-                  :chart-option="salesTrendChart.option"
-                  :chart-type="salesTrendChart.type"
-                  :is-dark="isDark"
-                  :is-highlighted="highlightedChartId === salesTrendChart.id"
-                  :alert-count="getChartAlertCount(salesTrendChart.id)"
-                  :keyword-match="getChartKeywordMatch(salesTrendChart.id)"
-                  :keyword-active="keywordMatchResult.hasActiveFilter"
-                  :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
-                  @refresh="refreshChart(salesTrendChart.id)"
-                  @remove="store.removeChart(salesTrendChart.id)"
-                  @click="handleChartClick(salesTrendChart.id)"
-                />
+                  :class="{ 'chart-leaving': deletingChartIds.has(salesTrendChart.id) }"
+                >
+                  <ChartCard
+                    :chart-id="salesTrendChart.id"
+                    :title="salesTrendChart.title"
+                    :chart-option="salesTrendChart.option"
+                    :chart-type="salesTrendChart.type"
+                    :is-dark="isDark"
+                    :is-highlighted="highlightedChartId === salesTrendChart.id"
+                    :alert-count="getChartAlertCount(salesTrendChart.id)"
+                    :keyword-match="getChartKeywordMatch(salesTrendChart.id)"
+                    :keyword-active="keywordMatchResult.hasActiveFilter"
+                    :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
+                    @refresh="refreshChart(salesTrendChart.id)"
+                    @remove="handleRemoveChart(salesTrendChart.id)"
+                    @click="handleChartClick(salesTrendChart.id)"
+                  />
+                </div>
               </div>
               <div class="chart-item">
-                <ChartCard
+                <div 
                   v-if="categoryChart"
-                  :chart-id="categoryChart.id"
-                  :title="categoryChart.title"
-                  :chart-option="categoryChart.option"
-                  :chart-type="categoryChart.type"
-                  :is-dark="isDark"
-                  :is-highlighted="highlightedChartId === categoryChart.id"
-                  :alert-count="getChartAlertCount(categoryChart.id)"
-                  :keyword-match="getChartKeywordMatch(categoryChart.id)"
-                  :keyword-active="keywordMatchResult.hasActiveFilter"
-                  :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
-                  @refresh="refreshChart(categoryChart.id)"
-                  @remove="store.removeChart(categoryChart.id)"
-                  @click="handleChartClick(categoryChart.id)"
-                />
+                  :class="{ 'chart-leaving': deletingChartIds.has(categoryChart.id) }"
+                >
+                  <ChartCard
+                    :chart-id="categoryChart.id"
+                    :title="categoryChart.title"
+                    :chart-option="categoryChart.option"
+                    :chart-type="categoryChart.type"
+                    :is-dark="isDark"
+                    :is-highlighted="highlightedChartId === categoryChart.id"
+                    :alert-count="getChartAlertCount(categoryChart.id)"
+                    :keyword-match="getChartKeywordMatch(categoryChart.id)"
+                    :keyword-active="keywordMatchResult.hasActiveFilter"
+                    :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
+                    @refresh="refreshChart(categoryChart.id)"
+                    @remove="handleRemoveChart(categoryChart.id)"
+                    @click="handleChartClick(categoryChart.id)"
+                  />
+                </div>
               </div>
             </div>
             <div class="chart-row">
               <div class="chart-item-full">
-                <ChartCard
+                <div 
                   v-if="marketShareChart"
-                  :chart-id="marketShareChart.id"
-                  :title="marketShareChart.title"
-                  :chart-option="marketShareChart.option"
-                  :chart-type="marketShareChart.type"
-                  :is-dark="isDark"
-                  :is-highlighted="highlightedChartId === marketShareChart.id"
-                  :alert-count="getChartAlertCount(marketShareChart.id)"
-                  :keyword-match="getChartKeywordMatch(marketShareChart.id)"
-                  :keyword-active="keywordMatchResult.hasActiveFilter"
-                  :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
-                  @refresh="refreshChart(marketShareChart.id)"
-                  @remove="store.removeChart(marketShareChart.id)"
-                  @click="handleChartClick(marketShareChart.id)"
-                />
+                  :class="{ 'chart-leaving': deletingChartIds.has(marketShareChart.id) }"
+                >
+                  <ChartCard
+                    :chart-id="marketShareChart.id"
+                    :title="marketShareChart.title"
+                    :chart-option="marketShareChart.option"
+                    :chart-type="marketShareChart.type"
+                    :is-dark="isDark"
+                    :is-highlighted="highlightedChartId === marketShareChart.id"
+                    :alert-count="getChartAlertCount(marketShareChart.id)"
+                    :keyword-match="getChartKeywordMatch(marketShareChart.id)"
+                    :keyword-active="keywordMatchResult.hasActiveFilter"
+                    :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
+                    @refresh="refreshChart(marketShareChart.id)"
+                    @remove="handleRemoveChart(marketShareChart.id)"
+                    @click="handleChartClick(marketShareChart.id)"
+                  />
+                </div>
               </div>
             </div>
 
@@ -141,10 +153,24 @@
       <Transition name="toast">
         <div 
           v-if="toastMessage" 
-          class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2"
-          :class="toastType === 'success' ? 'bg-green-500' : 'bg-blue-500'"
+          class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3"
+          :class="[
+            toastType === 'success' ? 'bg-green-500' : 
+            toastType === 'warning' ? 'bg-orange-500' : 
+            toastType === 'error' ? 'bg-red-500' : 'bg-blue-500'
+          ]"
         >
           <span class="text-white font-medium">{{ toastMessage }}</span>
+          <button 
+            v-if="showUndoButton"
+            @click="handleUndoDelete"
+            class="px-3 py-1 text-xs font-bold bg-white/20 hover:bg-white/30 text-white rounded-md transition-colors border border-white/30"
+          >
+            撤销
+          </button>
+          <div v-if="undoCountdown > 0" class="text-white/70 text-xs font-mono">
+            {{ undoCountdown }}s
+          </div>
         </div>
       </Transition>
     </Teleport>
@@ -161,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useDashboardStore } from './stores/dashboard';
 import { storeToRefs } from 'pinia';
 import DashboardHeader from './components/DashboardHeader.vue';
@@ -193,9 +219,21 @@ const chartsContainer = ref<HTMLElement | null>(null);
 const newChartIds = ref<Set<string>>(new Set());
 const deletingChartIds = ref<Set<string>>(new Set());
 const toastMessage = ref('');
-const toastType = ref<'success' | 'info'>('success');
+const toastType = ref<'success' | 'info' | 'warning' | 'error'>('success');
+const showUndoButton = ref(false);
+const undoCountdown = ref(0);
+
+interface PendingDeletion {
+  chartId: string;
+  chart: any;
+  originalIndex: number;
+}
+
+const pendingDeletion = ref<PendingDeletion | null>(null);
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+let undoTimer: ReturnType<typeof setTimeout> | null = null;
+let countdownTimer: ReturnType<typeof setInterval> | null = null;
 
 const salesTrendChart = computed(() => dashboard.value.charts.find(c => c.id === 'chart-1'));
 const categoryChart = computed(() => dashboard.value.charts.find(c => c.id === 'chart-2'));
@@ -213,13 +251,30 @@ const customChartRows = computed(() => {
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
-function showToast(message: string, type: 'success' | 'info' = 'success') {
+function showToast(message: string, type: 'success' | 'info' | 'warning' | 'error' = 'success', duration: number = 3000) {
   if (toastTimer) clearTimeout(toastTimer);
-  toastMessage.value = message;
-  toastType.value = type;
+  if (!showUndoButton.value) {
+    toastMessage.value = message;
+    toastType.value = type;
+  }
   toastTimer = setTimeout(() => {
-    toastMessage.value = '';
-  }, 3000);
+    if (!showUndoButton.value) {
+      toastMessage.value = '';
+    }
+  }, duration);
+}
+
+function clearUndoTimers() {
+  if (undoTimer) {
+    clearTimeout(undoTimer);
+    undoTimer = null;
+  }
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+  showUndoButton.value = false;
+  undoCountdown.value = 0;
 }
 
 function handleNewChartCreated(chartId: string) {
@@ -275,8 +330,20 @@ function handleRefreshComparison() {
 }
 
 function handleRemoveChart(chartId: string) {
+  const chart = dashboard.value.charts.find(c => c.id === chartId);
+  if (!chart) return;
+  
+  const originalIndex = dashboard.value.charts.findIndex(c => c.id === chartId);
+  
+  clearUndoTimers();
+  
+  pendingDeletion.value = {
+    chartId,
+    chart: JSON.parse(JSON.stringify(chart)),
+    originalIndex
+  };
+  
   deletingChartIds.value.add(chartId);
-  showToast('🗑️ 图表已删除，从布局中移除', 'info');
   
   const elementId = `chart-${chartId}`;
   const chartElement = document.getElementById(elementId);
@@ -284,11 +351,72 @@ function handleRemoveChart(chartId: string) {
     chartElement.classList.add('delete-flash');
   }
   
+  const UNDO_TIMEOUT = 5000;
+  undoCountdown.value = UNDO_TIMEOUT / 1000;
+  showUndoButton.value = true;
+  toastMessage.value = `🗑️ 图表「${chart.title}」已删除`;
+  toastType.value = 'warning';
+  
+  countdownTimer = setInterval(() => {
+    undoCountdown.value = Math.max(0, undoCountdown.value - 1);
+  }, 1000);
+  
+  undoTimer = setTimeout(() => {
+    finalizeDeletion(chartId);
+  }, UNDO_TIMEOUT);
+  
   setTimeout(() => {
-    store.removeChart(chartId);
-    deletingChartIds.value.delete(chartId);
-    newChartIds.value.delete(chartId);
+    if (pendingDeletion.value && pendingDeletion.value.chartId === chartId) {
+      store.removeChart(chartId);
+      deletingChartIds.value.delete(chartId);
+      newChartIds.value.delete(chartId);
+    }
   }, 400);
+}
+
+function finalizeDeletion(chartId: string) {
+  clearUndoTimers();
+  
+  if (pendingDeletion.value && pendingDeletion.value.chartId === chartId) {
+    pendingDeletion.value = null;
+    showToast('✅ 删除已生效', 'success', 2000);
+  }
+}
+
+function handleUndoDelete() {
+  if (!pendingDeletion.value) return;
+  
+  const { chartId, chart, originalIndex } = pendingDeletion.value;
+  
+  clearUndoTimers();
+  
+  store.addChart(chart);
+  
+  const charts = dashboard.value.charts;
+  const addedIndex = charts.findIndex(c => c.id === chartId);
+  if (addedIndex !== -1 && addedIndex !== originalIndex) {
+    const [removed] = charts.splice(addedIndex, 1);
+    charts.splice(originalIndex, 0, removed);
+  }
+  
+  newChartIds.value.add(chartId);
+  
+  pendingDeletion.value = null;
+  deletingChartIds.value.delete(chartId);
+  
+  showToast(`↩️ 已恢复图表「${chart.title}」`, 'success', 3000);
+  
+  nextTick(() => {
+    const elementId = `chart-${chartId}`;
+    const chartElement = document.getElementById(elementId);
+    if (chartElement) {
+      chartElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      chartElement.classList.add('undo-restore-flash');
+      setTimeout(() => {
+        chartElement.classList.remove('undo-restore-flash');
+      }, 1000);
+    }
+  });
 }
 
 function getChartAlertCount(chartId: string): number {
@@ -338,6 +466,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval);
   if (toastTimer) clearTimeout(toastTimer);
+  clearUndoTimers();
 });
 </script>
 
@@ -513,5 +642,43 @@ onUnmounted(() => {
   100% {
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
+}
+
+:deep(.undo-restore-flash) {
+  animation: undo-restore-animation 1s ease-out !important;
+}
+
+@keyframes undo-restore-animation {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.8), 0 0 40px rgba(34, 197, 94, 0.6);
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+  30% {
+    box-shadow: 0 0 0 20px rgba(34, 197, 94, 0), 0 0 80px rgba(34, 197, 94, 0.3);
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transform: scale(1);
+  }
+}
+
+.chart-list-move {
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chart-item,
+.chart-item-full {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chart-row {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.charts-container {
+  transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 </style>
