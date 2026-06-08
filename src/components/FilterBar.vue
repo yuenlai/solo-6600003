@@ -1,5 +1,74 @@
 <template>
   <div class="filter-bar bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 space-y-4">
+    <Transition name="slide-down">
+      <div v-if="allActiveFilters.length > 0" class="filter-status-bar bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2 text-sm">
+            <span class="text-gray-500 dark:text-gray-400">已选条件：</span>
+          </div>
+          <div class="flex flex-wrap gap-2 flex-1">
+            <TransitionGroup name="tag">
+              <div
+                v-for="filter in allActiveFilters"
+                :key="filter.id"
+                class="filter-tag inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800"
+              >
+                <span class="text-xs opacity-75">{{ filter.label }}:</span>
+                <span>{{ formatFilterValue(filter) }}</span>
+                <button
+                  @click="handleClearFilter(filter.id)"
+                  class="ml-1 w-4 h-4 rounded-full bg-primary-200 dark:bg-primary-800 hover:bg-primary-300 dark:hover:bg-primary-700 flex items-center justify-center transition-colors"
+                  title="清除此条件"
+                >
+                  <span class="text-xs text-primary-700 dark:text-primary-300 leading-none">×</span>
+                </button>
+              </div>
+            </TransitionGroup>
+          </div>
+          <button
+            @click="handleClearAllFilters"
+            class="px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors whitespace-nowrap"
+          >
+            清除全部
+          </button>
+        </div>
+      </div>
+    </Transition>
+
+    <Transition name="slide-down">
+      <div v-if="filterHitScope" class="hit-scope-bar bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-3 border border-blue-100 dark:border-blue-800">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-4 flex-wrap">
+            <div class="flex items-center gap-2">
+              <span class="text-blue-600 dark:text-blue-400">🎯</span>
+              <span class="text-sm text-gray-700 dark:text-gray-300">
+                命中范围：<span class="font-semibold text-blue-600 dark:text-blue-400">{{ filterHitScope.hit }}</span>
+                <span class="text-gray-500 dark:text-gray-400"> / {{ filterHitScope.total }} 条</span>
+                <span class="ml-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs rounded-full">
+                  {{ filterHitScope.percentage }}%
+                </span>
+              </span>
+            </div>
+            <div class="h-4 w-px bg-gray-200 dark:bg-gray-600 hidden sm:block"></div>
+            <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+              <span>
+                <span class="text-gray-500 dark:text-gray-500">地区：</span>
+                <span class="font-medium">{{ filterHitScope.region }}</span>
+              </span>
+              <span class="hidden sm:inline">
+                <span class="text-gray-500 dark:text-gray-500">销售额：</span>
+                <span class="font-medium">{{ formatNumber(filterHitScope.totalSales) }}</span>
+              </span>
+              <span class="hidden md:inline">
+                <span class="text-gray-500 dark:text-gray-500">订单量：</span>
+                <span class="font-medium">{{ formatNumber(filterHitScope.totalOrders) }}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div class="flex items-center gap-3">
         <span class="text-sm font-medium text-gray-700 dark:text-gray-300">查看模式：</span>
@@ -152,8 +221,8 @@
     <div class="other-filters flex items-center gap-4 flex-wrap pt-3 border-t border-gray-200 dark:border-gray-700">
       <div v-for="filter in otherFilters" :key="filter.id" class="flex items-center gap-2">
         <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ filter.label }}:</label>
-        <input v-if="filter.type === 'text'" v-model="filter.value" type="text"
-          @input="store.updateFilter(filter.id, filter.value)"
+        <input v-if="filter.type === 'text'" :value="filter.value" type="text"
+          @input="handleTextFilterInput(filter.id, $event)"
           :placeholder="filter.label"
           class="text-sm border rounded px-2 py-1 w-40 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
         <input v-else-if="filter.type === 'date-range'" type="date"
@@ -168,9 +237,17 @@
 import { computed } from 'vue';
 import { useDashboardStore } from '../stores/dashboard';
 import { storeToRefs } from 'pinia';
+import type { FilterConfig } from '../types';
 
 const store = useDashboardStore();
-const { dashboard, comparisonData, compareMode, compareModeLoading } = storeToRefs(store);
+const { 
+  dashboard, 
+  comparisonData, 
+  compareMode, 
+  compareModeLoading, 
+  allActiveFilters, 
+  filterHitScope 
+} = storeToRefs(store);
 
 const regionFilter = computed(() => 
   dashboard.value.filters.find(f => f.field === 'region')
@@ -188,6 +265,30 @@ const compareRegions = computed(() => {
 const overallLeader = computed(() => {
   return comparisonData.value?.summary.overallLeader || null;
 });
+
+function formatFilterValue(filter: FilterConfig & { field: string }): string {
+  if (filter.field === 'compareRegionA' || filter.field === 'compareRegionB') {
+    const icon = getRegionIcon(filter.value);
+    const name = filter.value === 'all' ? '全国' : filter.value;
+    return `${icon} ${name}`;
+  }
+  if (filter.field === 'region') {
+    const icon = getRegionIcon(filter.value);
+    const name = filter.value === 'all' ? '全国' : filter.value;
+    return `${icon} ${name}`;
+  }
+  if (filter.type === 'date-range' && Array.isArray(filter.value)) {
+    return filter.value.join(' ~ ') || '未设置';
+  }
+  return String(filter.value) || '未设置';
+}
+
+function formatNumber(num: number): string {
+  if (num >= 10000) {
+    return (num / 10000).toFixed(1) + ' 万';
+  }
+  return num.toLocaleString();
+}
 
 function handleRegionChange(value: string) {
   if (regionFilter.value) {
@@ -207,6 +308,19 @@ function handleCompareRegionChange(side: 'A' | 'B', region: string) {
 
 function handleRefreshCompare() {
   store.refreshComparisonData();
+}
+
+function handleClearFilter(filterId: string) {
+  store.clearFilter(filterId);
+}
+
+function handleClearAllFilters() {
+  store.clearAllFilters();
+}
+
+function handleTextFilterInput(filterId: string, event: Event) {
+  const target = event.target as HTMLInputElement;
+  store.updateFilter(filterId, target.value);
 }
 
 function getRegionIcon(region: string): string {
@@ -247,6 +361,21 @@ function getRegionIcon(region: string): string {
   transform: translateY(-1px);
 }
 
+.filter-tag {
+  animation: tagPulse 0.3s ease-out;
+}
+
+@keyframes tagPulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -256,5 +385,46 @@ function getRegionIcon(region: string): string {
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-5px);
+}
+
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.slide-down-enter-to,
+.slide-down-leave-from {
+  opacity: 1;
+  max-height: 200px;
+}
+
+.tag-enter-active,
+.tag-leave-active {
+  transition: all 0.3s ease;
+}
+
+.tag-enter-from {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.tag-leave-to {
+  opacity: 0;
+  transform: scale(0.8);
+  margin: 0 -10px;
+}
+
+.tag-move {
+  transition: transform 0.3s ease;
 }
 </style>

@@ -244,6 +244,70 @@ export const useDashboardStore = defineStore('dashboard', () => {
     return regionFilter ? regionFilter.value : 'all';
   });
 
+  const activeFilters = computed(() => {
+    return dashboard.value.filters.filter(filter => {
+      if (filter.type === 'select') {
+        return filter.value && filter.value !== 'all';
+      }
+      if (filter.type === 'text') {
+        return filter.value && filter.value.trim() !== '';
+      }
+      if (filter.type === 'date-range') {
+        return filter.value && filter.value.length > 0;
+      }
+      return false;
+    });
+  });
+
+  const activeFiltersCount = computed(() => activeFilters.value.length);
+
+  const compareModeActiveFilters = computed((): (FilterConfig & { field: string })[] => {
+    if (!compareMode.value.enabled) return [];
+    return [
+      { id: 'compare-A', field: 'compareRegionA', label: '对比地区A', type: 'select' as const, value: compareMode.value.regionA },
+      { id: 'compare-B', field: 'compareRegionB', label: '对比地区B', type: 'select' as const, value: compareMode.value.regionB }
+    ];
+  });
+
+  const allActiveFilters = computed(() => {
+    return [...activeFilters.value, ...compareModeActiveFilters.value];
+  });
+
+  const filterHitScope = computed(() => {
+    const region = currentRegion.value;
+    const overview = currentRegionData.value.overview;
+    
+    const totalRecords = 1000;
+    const keywordFilter = dashboard.value.filters.find(f => f.field === 'keyword');
+    const dateFilter = dashboard.value.filters.find(f => f.field === 'dateRange');
+    
+    let hitRate = 1.0;
+    if (keywordFilter && keywordFilter.value && keywordFilter.value.trim() !== '') {
+      hitRate *= 0.3;
+    }
+    if (dateFilter && dateFilter.value && dateFilter.value.length > 0) {
+      hitRate *= 0.5;
+    }
+    if (region !== 'all') {
+      hitRate *= 0.4;
+    }
+    if (compareMode.value.enabled) {
+      hitRate *= 0.8;
+    }
+    
+    const hitRecords = Math.floor(totalRecords * hitRate);
+    
+    return {
+      total: totalRecords,
+      hit: hitRecords,
+      percentage: ((hitRecords / totalRecords) * 100).toFixed(1),
+      region: region === 'all' ? '全国' : region,
+      totalSales: overview.totalSales,
+      totalOrders: overview.orderCount,
+      totalCustomers: overview.customerCount
+    };
+  });
+
   const currentRegionData = computed(() => {
     const region = currentRegion.value;
     regionUpdateFlag.value;
@@ -476,6 +540,50 @@ export const useDashboardStore = defineStore('dashboard', () => {
         refreshAlerts(true);
       }
     }
+  }
+
+  function clearFilter(filterId: string) {
+    if (filterId === 'compare-A' || filterId === 'compare-B') {
+      if (compareMode.value.enabled) {
+        toggleCompareMode();
+      }
+      return;
+    }
+    const filter = dashboard.value.filters.find(f => f.id === filterId);
+    if (filter) {
+      if (filter.type === 'select') {
+        filter.value = 'all';
+      } else if (filter.type === 'text') {
+        filter.value = '';
+      } else if (filter.type === 'date-range') {
+        filter.value = [];
+      }
+      clearCurrentScheme();
+      if (filter.field === 'region') {
+        regionUpdateFlag.value++;
+        updateChartsForRegion(filter.value);
+        refreshAlerts(true);
+      }
+    }
+  }
+
+  function clearAllFilters() {
+    dashboard.value.filters.forEach(filter => {
+      if (filter.type === 'select') {
+        filter.value = 'all';
+      } else if (filter.type === 'text') {
+        filter.value = '';
+      } else if (filter.type === 'date-range') {
+        filter.value = [];
+      }
+    });
+    if (compareMode.value.enabled) {
+      compareMode.value.enabled = false;
+    }
+    clearCurrentScheme();
+    regionUpdateFlag.value++;
+    updateChartsForRegion('all');
+    refreshAlerts(true);
   }
 
   function updateChartGrid(chartId: string, gridArea: ChartConfig['gridArea']) {
@@ -1078,8 +1186,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
     chartDetailDrawerVisible, selectedChartId, chartDetailData, chartDetailLoading,
     compareMode, compareModeLoading, comparisonData, comparisonVersion, regionDataA, regionDataB,
     schemes, currentSchemeId, currentScheme, schemeLoading,
+    activeFilters, activeFiltersCount, compareModeActiveFilters, allActiveFilters, filterHitScope,
     saveScheme, applyScheme, deleteScheme, renameScheme, checkSchemeNameExists, clearCurrentScheme,
-    toggleTheme, updateFilter, updateChartGrid, addChart, removeChart, updateChartData,
+    toggleTheme, updateFilter, clearFilter, clearAllFilters, updateChartGrid, addChart, removeChart, updateChartData,
     refreshRegionData, updateChartsForRegion,
     refreshAlerts, markAlertAsRead, markAllAlertsAsRead,
     dismissAlert, clearAllAlerts, setHighlightedChart, toggleAlertAutoRefresh,
