@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, nextTick, watch } from 'vue';
-import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName, DashboardScheme, FilterConfig, ChartDetailData, KeywordMatchResult, ChartKeywordMatch, KeywordMatchItem, OverviewKeywordMatch } from '../types';
+import type { Dashboard, ChartConfig, RegionData, Alert, AlertLevel, DataDimension, CompareModeState, RegionComparisonData, MetricComparison, MetricName, DashboardScheme, FilterConfig, ChartDetailData, KeywordMatchResult, ChartKeywordMatch, KeywordMatchItem, OverviewKeywordMatch, ChartRefreshResult, ChartDataChange } from '../types';
 import { generateRegionData, generateAlerts, generateMockAlerts, generateScatterData, generateHeatmapData, generateChartDetailData } from '../mock/data';
 
 const SCHEMES_STORAGE_KEY = 'dashboard-schemes';
@@ -1265,9 +1265,91 @@ export const useDashboardStore = defineStore('dashboard', () => {
     return chart;
   }
 
-  function refreshCustomChart(chartId: string) {
+  function extractSeriesValues(option: Record<string, any>): { name: string; value: number }[] {
+    const result: { name: string; value: number }[] = [];
+    if (!option.series || !Array.isArray(option.series)) return result;
+
+    option.series.forEach((series: any) => {
+      const seriesName = series.name || '未命名';
+      if (series.data && Array.isArray(series.data)) {
+        let total = 0;
+        let count = 0;
+        series.data.forEach((item: any) => {
+          let value = 0;
+          if (typeof item === 'number') {
+            value = item;
+          } else if (typeof item === 'object' && item !== null) {
+            value = typeof item.value === 'number' ? item.value : 0;
+          }
+          total += value;
+          count++;
+        });
+        if (count > 0) {
+          result.push({ name: seriesName, value: total });
+        }
+      }
+    });
+    return result;
+  }
+
+  function calculateDataChanges(
+    oldOption: Record<string, any>,
+    newOption: Record<string, any>
+  ): ChartDataChange[] {
+    const oldValues = extractSeriesValues(oldOption);
+    const newValues = extractSeriesValues(newOption);
+    const changes: ChartDataChange[] = [];
+
+    oldValues.forEach((oldItem, index) => {
+      const newItem = newValues[index] || { name: oldItem.name, value: oldItem.value };
+      const oldValue = oldItem.value;
+      const newValue = newItem.value;
+      const changeValue = newValue - oldValue;
+      const changePercent = oldValue !== 0 ? changeValue / oldValue : 0;
+
+      changes.push({
+        seriesName: oldItem.name,
+        oldValue,
+        newValue,
+        changeValue,
+        changePercent
+      });
+    });
+
+    return changes;
+  }
+
+  function formatRefreshResult(
+    chartId: string,
+    chartTitle: string,
+    startTime: number,
+    dataChanges: ChartDataChange[]
+  ): ChartRefreshResult {
+    const totalChangeCount = dataChanges.filter(c => Math.abs(c.changeValue) > 0.001).length;
+    const maxChange = dataChanges.length > 0
+      ? dataChanges.reduce((max, curr) => 
+          Math.abs(curr.changePercent) > Math.abs(max.changePercent) ? curr : max
+        , dataChanges[0])
+      : null;
+
+    return {
+      chartId,
+      chartTitle,
+      refreshedAt: new Date().toISOString(),
+      durationMs: Date.now() - startTime,
+      dataChanges,
+      totalChangeCount,
+      hasChanges: totalChangeCount > 0,
+      maxChange
+    };
+  }
+
+  function refreshCustomChart(chartId: string): ChartRefreshResult | null {
     const chart = dashboard.value.charts.find(c => c.id === chartId);
-    if (!chart || !chart.isCustom || !chart.dataDimension) return;
+    if (!chart || !chart.isCustom || !chart.dataDimension) return null;
+
+    const startTime = Date.now();
+    const oldOption = JSON.parse(JSON.stringify(chart.option));
 
     const region = currentRegion.value;
     const cacheKey = getRegionCacheKey(region);
@@ -1276,6 +1358,75 @@ export const useDashboardStore = defineStore('dashboard', () => {
     
     const newOption = generateChartOption(chart.type, chart.dataDimension, data);
     chart.option = { ...newOption };
+
+    const dataChanges = calculateDataChanges(oldOption, newOption);
+    return formatRefreshResult(chartId, chart.title, startTime, dataChanges);
+  }
+
+  function refreshBuiltinChart(chartId: string): ChartRefreshResult | null {
+    const chart = dashboard.value.charts.find(c => c.id === chartId);
+    if (!chart || chart.isCustom) return null;
+
+    const startTime = Date.now();
+    const oldOption = JSON.parse(JSON.stringify(chart.option));
+
+    const region = currentRegion.value;
+    const cacheKey = getRegionCacheKey(region);
+    const data = generateRegionData(region, currentDateRange.value);
+    regionDataCache.value[cacheKey] = data;
+    regionUpdateFlag.value++;
+    dateRangeUpdateFlag.value++;
+
+    if (chartId === 'chart-1') {
+      const newOption = {
+        ...chart.option,
+        xAxis: { ...chart.option.xAxis, data: [...data.salesTrend.months] },
+        series: [
+          { ...chart.option.series[0], data: data.salesTrend.sales.map(toWan) },
+          { ...chart.option.series[1], data: data.salesTrend.orders.map(toWan) }
+        ]
+      };
+      chart.option = newOption;
+    } else if (chartId === 'chart-2') {
+      const newOption = {
+        ...chart.option,
+        xAxis: { ...chart.option.xAxis, data: [...data.categorySales.categories] },
+        series: [{
+          ...chart.option.series[0],
+          data: data.categorySales.sales.map((s, i) => ({
+            value: toWan(s),
+            growth: data.categorySales.growth[i]
+          }))
+        }]
+      };
+      chart.option = newOption;
+    } else if (chartId === 'chart-3') {
+      const newOption = {
+        ...chart.option,
+        series: [{
+          ...chart.option.series[0],
+          data: data.marketShare.channels.map(c => ({
+            name: c.name,
+            value: toWan(c.value)
+          }))
+        }]
+      };
+      chart.option = newOption;
+    }
+
+    const dataChanges = calculateDataChanges(oldOption, chart.option);
+    return formatRefreshResult(chartId, chart.title, startTime, dataChanges);
+  }
+
+  function refreshSingleChart(chartId: string): ChartRefreshResult | null {
+    const chart = dashboard.value.charts.find(c => c.id === chartId);
+    if (!chart) return null;
+
+    if (chart.isCustom) {
+      return refreshCustomChart(chartId);
+    } else {
+      return refreshBuiltinChart(chartId);
+    }
   }
 
   function refreshRegionData() {
@@ -1518,7 +1669,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     refreshAlerts, markAlertAsRead, markAllAlertsAsRead,
     dismissAlert, clearAllAlerts, setHighlightedChart, toggleAlertAutoRefresh,
     openChartDetail, closeChartDetail, refreshChartDetail,
-    addCustomChart, refreshCustomChart, generateChartOption,
+    addCustomChart, refreshCustomChart, refreshBuiltinChart, refreshSingleChart, generateChartOption,
     toggleCompareMode, setCompareRegion, refreshComparisonData, ensureCompareDataLoaded,
     getChartMatch, getHighlightedChartOption, isTextMatch
   };

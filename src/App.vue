@@ -56,9 +56,11 @@
                     :keyword-match="getChartKeywordMatch(salesTrendChart.id)"
                     :keyword-active="keywordMatchResult.hasActiveFilter"
                     :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
+                    :refresh-result="chartRefreshResults[salesTrendChart.id]"
                     @refresh="refreshChart(salesTrendChart.id)"
                     @remove="handleRemoveChart(salesTrendChart.id)"
                     @click="handleChartClick(salesTrendChart.id)"
+                    @dismiss-refresh-result="handleDismissRefreshResult(salesTrendChart.id)"
                   />
                 </div>
               </div>
@@ -78,9 +80,11 @@
                     :keyword-match="getChartKeywordMatch(categoryChart.id)"
                     :keyword-active="keywordMatchResult.hasActiveFilter"
                     :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
+                    :refresh-result="chartRefreshResults[categoryChart.id]"
                     @refresh="refreshChart(categoryChart.id)"
                     @remove="handleRemoveChart(categoryChart.id)"
                     @click="handleChartClick(categoryChart.id)"
+                    @dismiss-refresh-result="handleDismissRefreshResult(categoryChart.id)"
                   />
                 </div>
               </div>
@@ -102,9 +106,11 @@
                     :keyword-match="getChartKeywordMatch(marketShareChart.id)"
                     :keyword-active="keywordMatchResult.hasActiveFilter"
                     :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
+                    :refresh-result="chartRefreshResults[marketShareChart.id]"
                     @refresh="refreshChart(marketShareChart.id)"
                     @remove="handleRemoveChart(marketShareChart.id)"
                     @click="handleChartClick(marketShareChart.id)"
+                    @dismiss-refresh-result="handleDismissRefreshResult(marketShareChart.id)"
                   />
                 </div>
               </div>
@@ -134,10 +140,12 @@
                       :keyword-match="getChartKeywordMatch(chart.id)"
                       :keyword-active="keywordMatchResult.hasActiveFilter"
                       :has-any-keyword-match="keywordMatchResult.hasAnyMatch"
+                      :refresh-result="chartRefreshResults[chart.id]"
                       @refresh="refreshChart(chart.id)"
                       @remove="handleRemoveChart(chart.id)"
                       @animation-end="handleAnimationEnd(chart.id)"
                       @click="handleChartClick(chart.id)"
+                      @dismiss-refresh-result="handleDismissRefreshResult(chart.id)"
                     />
                   </div>
                 </div>
@@ -198,9 +206,10 @@ import AlertPanel from './components/AlertPanel.vue';
 import RegionCompare from './components/RegionCompare.vue';
 import RegionCompareSkeleton from './components/RegionCompareSkeleton.vue';
 import ChartDetailDrawer from './components/ChartDetailDrawer.vue';
+import type { ChartRefreshResult } from './types';
 
 const store = useDashboardStore();
-const { dashboard, isDark, regionOverview, alerts, highlightedChartId, compareMode, compareModeLoading, comparisonData, comparisonVersion, chartDetailDrawerVisible, chartDetailData, chartDetailLoading, keywordMatchResult } = storeToRefs(store);
+const { dashboard, isDark, regionOverview, alerts, highlightedChartId, compareMode, compareModeLoading, comparisonData, comparisonVersion, chartDetailDrawerVisible, chartDetailData, chartDetailLoading, keywordMatchResult, currentRegion, currentDateRange } = storeToRefs(store);
 
 watch(() => compareMode.value.enabled, (newVal) => {
   if (newVal) {
@@ -210,6 +219,10 @@ watch(() => compareMode.value.enabled, (newVal) => {
     showToast('📊 已切换到单地区模式', 'info');
   }
 });
+
+watch([() => currentRegion.value, () => currentDateRange.value], () => {
+  chartRefreshResults.value = {};
+}, { deep: true });
 
 onMounted(() => {
   store.ensureCompareDataLoaded();
@@ -222,6 +235,7 @@ const toastMessage = ref('');
 const toastType = ref<'success' | 'info' | 'warning' | 'error'>('success');
 const showUndoButton = ref(false);
 const undoCountdown = ref(0);
+const chartRefreshResults = ref<Record<string, ChartRefreshResult | null>>({});
 
 interface PendingDeletion {
   chartId: string;
@@ -299,29 +313,44 @@ function handleAnimationEnd(chartId: string) {
 }
 
 function refreshChart(chartId: string) {
-  const chart = dashboard.value.charts.find(c => c.id === chartId);
-  if (chart && chart.isCustom) {
-    store.refreshCustomChart(chartId);
-    setTimeout(() => {
-      showToast('🔄 数据已刷新，数值已更新', 'info');
-      
-      const elementId = `chart-${chartId}`;
-      const chartElement = document.getElementById(elementId);
-      if (chartElement) {
-        chartElement.classList.add('refresh-flash');
-        setTimeout(() => {
-          chartElement.classList.remove('refresh-flash');
-        }, 600);
-      }
-    }, 600);
+  const result = store.refreshSingleChart(chartId);
+  
+  if (result) {
+    chartRefreshResults.value[chartId] = result;
+
+    const elementId = `chart-${chartId}`;
+    const chartElement = document.getElementById(elementId);
+    if (chartElement) {
+      chartElement.classList.add('refresh-flash');
+      setTimeout(() => {
+        chartElement.classList.remove('refresh-flash');
+      }, 600);
+    }
+
+    let toastMessage = `🔄 「${result.chartTitle}」刷新完成`;
+    if (result.hasChanges && result.maxChange) {
+      const isUp = result.maxChange.changeValue > 0;
+      const percentText = (result.maxChange.changePercent * 100).toFixed(1);
+      toastMessage += ` · ${result.maxChange.seriesName} ${isUp ? '↑' : '↓'} ${percentText}%`;
+    } else {
+      toastMessage += ' · 数据暂无变化';
+    }
+    toastMessage += ` · 耗时 ${result.durationMs}ms`;
+    
+    showToast(toastMessage, 'info');
   } else {
     store.refreshRegionData();
     showToast('🔄 全局数据已刷新', 'info');
   }
 }
 
+function handleDismissRefreshResult(chartId: string) {
+  chartRefreshResults.value[chartId] = null;
+}
+
 function handleRefreshOverview() {
   store.refreshRegionData();
+  chartRefreshResults.value = {};
 }
 
 function handleRefreshComparison() {
@@ -379,6 +408,7 @@ function finalizeDeletion(chartId: string) {
   
   if (pendingDeletion.value && pendingDeletion.value.chartId === chartId) {
     pendingDeletion.value = null;
+    delete chartRefreshResults.value[chartId];
     showToast('✅ 删除已生效', 'success', 2000);
   }
 }

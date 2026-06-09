@@ -72,12 +72,17 @@
           @click.stop="handleRefresh" 
           :disabled="isRefreshing"
           :class="[
-            'text-xs flex items-center gap-1 transition-colors',
-            isRefreshing ? 'text-gray-400 cursor-not-allowed' : 'text-gray-400 hover:text-primary-500'
+            'text-xs flex items-center gap-1 transition-all duration-300 px-2 py-1 rounded',
+            isRefreshing 
+              ? 'text-primary-500 bg-primary-50 dark:bg-primary-900/30 cursor-not-allowed' 
+              : 'text-gray-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20'
           ]"
         >
-          <span :class="{ 'animate-spin': isRefreshing }">🔄</span>
-          {{ isRefreshing ? '刷新中...' : '刷新' }}
+          <span :class="[
+            'transition-transform duration-300',
+            isRefreshing ? 'animate-spin' : 'group-hover:rotate-180'
+          ]">🔄</span>
+          <span>{{ isRefreshing ? '刷新中...' : '刷新' }}</span>
         </button>
         <button 
           @click.stop="showDeleteConfirm = true" 
@@ -90,22 +95,127 @@
     <div class="chart-container" style="height: 280px; width: 100%; position: relative;">
       <div 
         v-if="!chartReady || isRefreshing" 
-        class="absolute inset-0 flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-700 rounded z-10"
+        class="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/95 dark:bg-gray-700/95 backdrop-blur-sm rounded z-10 transition-all duration-300"
       >
-        <div v-if="isRefreshing" class="flex flex-col items-center gap-2">
-          <div class="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-          <span class="text-gray-500 dark:text-gray-400 text-sm">{{ refreshText }}</span>
+        <div v-if="isRefreshing" class="flex flex-col items-center gap-3">
+          <div class="relative">
+            <div class="w-12 h-12 border-4 border-primary-200 dark:border-primary-800 rounded-full"></div>
+            <div class="absolute top-0 left-0 w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-primary-500 text-xs font-bold">
+              ↻
+            </div>
+          </div>
+          <span class="text-gray-600 dark:text-gray-300 text-sm font-medium">{{ refreshText }}</span>
+          <div class="w-32 h-1 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-primary-400 to-primary-600 rounded-full animate-progress"></div>
+          </div>
         </div>
         <span v-else class="text-gray-400 text-sm">加载中...</span>
       </div>
       <v-chart
         v-if="chartReady"
+        :key="chartVersion"
         :option="currentChartOption"
         :theme="isDark ? 'dark' : ''"
         autoresize
-        style="height: 100%; width: 100%;"
+        style="height: 100%; width: 100%; transition: opacity 0.3s ease;"
       />
     </div>
+
+    <Transition name="refresh-result-slide">
+      <div 
+        v-if="refreshResult && refreshSummary" 
+        class="mt-3 p-3 rounded-lg border transition-all cursor-pointer group"
+        :class="[
+          refreshResult.hasChanges 
+            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
+            : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+        ]"
+        @click.stop="showRefreshDetail = !showRefreshDetail"
+      >
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">{{ refreshSummary.icon }}</span>
+            <div class="flex flex-col">
+              <div class="flex items-center gap-2">
+                <span 
+                  class="text-sm font-semibold"
+                  :class="refreshSummary.color"
+                >
+                  {{ refreshSummary.text }}
+                </span>
+                <span 
+                  v-if="refreshSummary.detail" 
+                  class="text-xs"
+                  :class="refreshSummary.color"
+                >
+                  {{ refreshSummary.detail }}
+                </span>
+              </div>
+              <span class="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                <span>⏱️</span>
+                <span>{{ formattedRefreshTime }} 刷新完成</span>
+                <span v-if="refreshResult" class="text-gray-300 dark:text-gray-600">·</span>
+                <span v-if="refreshResult" class="text-gray-400 dark:text-gray-500">
+                  耗时 {{ refreshResult.durationMs }}ms
+                </span>
+                <span v-if="refreshResult && refreshResult.totalChangeCount > 0" class="text-gray-300 dark:text-gray-600">·</span>
+                <span v-if="refreshResult && refreshResult.totalChangeCount > 0" class="text-gray-400 dark:text-gray-500">
+                  {{ refreshResult.totalChangeCount }} 项指标变化
+                </span>
+              </span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button 
+              @click.stop="dismissRefreshResult"
+              class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors opacity-0 group-hover:opacity-100"
+              title="关闭"
+            >
+              ✕
+            </button>
+            <span class="text-gray-400 text-xs transition-transform" :class="{ 'rotate-180': showRefreshDetail }">
+              ▼
+            </span>
+          </div>
+        </div>
+
+        <Transition name="expand">
+          <div v-if="showRefreshDetail && refreshResult && refreshResult.dataChanges.length > 0" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <h4 class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">数据变化详情</h4>
+            <div class="space-y-2">
+              <div 
+                v-for="(change, index) in refreshResult.dataChanges" 
+                :key="index"
+                class="flex items-center justify-between text-sm"
+              >
+                <span class="text-gray-600 dark:text-gray-300">{{ change.seriesName }}</span>
+                <div class="flex items-center gap-3">
+                  <span class="text-gray-400 dark:text-gray-500 text-xs">
+                    {{ change.oldValue.toFixed(1) }} → {{ change.newValue.toFixed(1) }}
+                  </span>
+                  <span 
+                    class="text-xs font-medium px-2 py-0.5 rounded"
+                    :class="[
+                      change.changeValue > 0 
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' 
+                        : change.changeValue < 0 
+                          ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                    ]"
+                  >
+                    <span v-if="change.changeValue > 0">↑</span>
+                    <span v-else-if="change.changeValue < 0">↓</span>
+                    <span v-else>→</span>
+                    {{ (change.changePercent * 100).toFixed(1) }}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </div>
+    </Transition>
 
     <Transition name="replay-slide">
       <TrendReplay
@@ -198,6 +308,7 @@ import {
   GridComponent, VisualMapComponent
 } from 'echarts/components';
 import TrendReplay from './TrendReplay.vue';
+import type { ChartRefreshResult } from '../types';
 
 use([
   CanvasRenderer, LineChart, BarChart, PieChart, ScatterChart, HeatmapChart,
@@ -222,9 +333,10 @@ const props = defineProps<{
   } | null;
   keywordActive?: boolean;
   hasAnyKeywordMatch?: boolean;
+  refreshResult?: ChartRefreshResult | null;
 }>();
 
-const emit = defineEmits(['refresh', 'remove', 'animationEnd', 'click']);
+const emit = defineEmits(['refresh', 'remove', 'animationEnd', 'click', 'dismissRefreshResult']);
 
 const chartReady = ref(false);
 const isRefreshing = ref(false);
@@ -234,6 +346,9 @@ const showReplayPanel = ref(false);
 const activeChartOption = ref<Record<string, any> | null>(null);
 const isReplaying = ref(false);
 const trendReplayRef = ref<InstanceType<typeof TrendReplay> | null>(null);
+const showRefreshDetail = ref(false);
+const chartVersion = ref(0);
+let refreshResultTimer: ReturnType<typeof setTimeout> | null = null;
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let _animationTimer: ReturnType<typeof setTimeout> | null = null;
@@ -264,6 +379,41 @@ const matchedItemsCount = computed(() => {
   count += props.keywordMatch.legendMatches.filter(m => m.matched).length;
   count += props.keywordMatch.categoryMatches.filter(m => m.matched).length;
   return count;
+});
+
+const formattedRefreshTime = computed(() => {
+  if (!props.refreshResult) return '';
+  const date = new Date(props.refreshResult.refreshedAt);
+  return date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+});
+
+const refreshSummary = computed(() => {
+  if (!props.refreshResult) return null;
+  const result = props.refreshResult;
+  if (!result.hasChanges || result.dataChanges.length === 0) {
+    return {
+      text: '数据暂无变化',
+      icon: '📊',
+      color: 'text-gray-500 dark:text-gray-400'
+    };
+  }
+  const maxChange = result.maxChange;
+  if (!maxChange) return null;
+
+  const isUp = maxChange.changeValue > 0;
+  const percentText = (maxChange.changePercent * 100).toFixed(1);
+  const valueText = maxChange.changeValue >= 0 ? `+${maxChange.changeValue.toFixed(1)}` : maxChange.changeValue.toFixed(1);
+
+  return {
+    text: `${maxChange.seriesName} ${isUp ? '↑' : '↓'} ${percentText}%`,
+    detail: `(${valueText})`,
+    icon: isUp ? '📈' : '📉',
+    color: isUp ? 'text-green-500' : 'text-red-500'
+  };
 });
 
 const currentChartOption = computed(() => {
@@ -440,6 +590,7 @@ function handleRefresh() {
     
     setTimeout(() => {
       isRefreshing.value = false;
+      chartVersion.value++;
     }, 800);
   }, 500);
 }
@@ -454,6 +605,26 @@ function handleCardClick() {
   emit('click');
 }
 
+function dismissRefreshResult() {
+  if (refreshResultTimer) {
+    clearTimeout(refreshResultTimer);
+    refreshResultTimer = null;
+  }
+  emit('dismissRefreshResult');
+}
+
+watch(() => props.refreshResult, (newResult) => {
+  if (newResult) {
+    chartVersion.value++;
+    if (refreshResultTimer) {
+      clearTimeout(refreshResultTimer);
+    }
+    refreshResultTimer = setTimeout(() => {
+      dismissRefreshResult();
+    }, 8000);
+  }
+});
+
 onMounted(() => {
   nextTick(() => {
     setTimeout(() => {
@@ -465,6 +636,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (refreshTimer) clearTimeout(refreshTimer);
   if (_animationTimer) clearTimeout(_animationTimer);
+  if (refreshResultTimer) clearTimeout(refreshResultTimer);
 });
 </script>
 
@@ -615,5 +787,83 @@ onUnmounted(() => {
   50% {
     box-shadow: 0 0 40px rgba(59, 130, 246, 0.5);
   }
+}
+
+.refresh-result-slide-enter-active,
+.refresh-result-slide-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.refresh-result-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.refresh-result-slide-leave-to {
+  opacity: 0;
+  transform: translateY(5px) scale(0.95);
+}
+
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.expand-enter-to,
+.expand-leave-from {
+  max-height: 300px;
+}
+
+@keyframes progress {
+  0% {
+    width: 0%;
+    margin-left: 0%;
+  }
+  50% {
+    width: 70%;
+    margin-left: 0%;
+  }
+  100% {
+    width: 30%;
+    margin-left: 100%;
+  }
+}
+
+.animate-progress {
+  animation: progress 1.5s ease-in-out infinite;
+}
+
+.refresh-result-slide-enter-active {
+  animation: refresh-result-pulse 0.6s ease-out;
+}
+
+@keyframes refresh-result-pulse {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.chart-card.is-loading v-chart {
+  opacity: 0.3;
+  filter: blur(1px);
 }
 </style>

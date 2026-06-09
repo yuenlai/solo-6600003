@@ -266,6 +266,25 @@ export interface KeywordMatchResult {
   noMatchReason?: string;
 }
 
+export interface ChartDataChange {
+  seriesName: string;
+  oldValue: number;
+  newValue: number;
+  changeValue: number;
+  changePercent: number;
+}
+
+export interface ChartRefreshResult {
+  chartId: string;
+  chartTitle: string;
+  refreshedAt: string;
+  durationMs: number;
+  dataChanges: ChartDataChange[];
+  totalChangeCount: number;
+  hasChanges: boolean;
+  maxChange: ChartDataChange | null;
+}
+
 export interface DashboardScheme {
   id: string;
   name: string;
